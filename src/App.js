@@ -13,58 +13,12 @@ import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
  */
 const App = () => {
   // --- Estados de la aplicación
-  const [tracks, setTracks] = useState([
-    {
-      id: 'melody',
-      name: 'Melodía',
-      instrumentType: 'synth',
-      // Notas de la melodía principal de "Zombies on Your Lawn"
-      notes: [],
-      noteSequence: 'sol, sol, mi, fa, fa, mi, re, do, re, re, re, mi, mi, mi, fa, fa, fa, sol, sol, fa, mi, re, do',
-      volume: 0.8,
-      delaySend: 0.3
-    },
-    {
-      id: 'harmony',
-      name: 'Armonía (Piano)',
-      instrumentType: 'piano',
-      // Progresión de acordes simple para la canción
-      notes: [],
-      noteSequence: 'do4, mi4, sol4, -, do4, mi4, sol4, -, re4, fa4, la4, -, re4, fa4, la4, -, mi4, sol4, si4, -, mi4, sol4, si4, -, fa4, la4, do5, -, fa4, la4, do5, -',
-      volume: 0.6,
-      delaySend: 0.2
-    },
-    {
-      id: 'bass',
-      name: 'Bajo',
-      instrumentType: '8bit', // Usamos un sonido 8-bit para el bajo
-      // Notas de una línea de bajo más detallada para la canción
-      notes: [],
-      noteSequence: 'do, -, do, -, mi, -, mi, -, fa, -, fa, -, sol, -, sol, -, la, -, la, -, si, -, si, -, do5, -, do5, -',
-      volume: 0.7,
-      delaySend: 0.2
-    },
-    {
-      id: 'drums',
-      name: 'Batería',
-      instrumentType: 'drums',
-      // Patrón de batería mejorado con bombo, caja y hi-hat
-      notes: [
-        { x: 0, y: 'Kick' }, { x: 4, y: 'Kick' }, { x: 8, y: 'Kick' }, { x: 12, y: 'Kick' },
-        { x: 2, y: 'Snare' }, { x: 6, y: 'Snare' }, { x: 10, y: 'Snare' }, { x: 14, y: 'Snare' },
-        { x: 0, y: 'Hi-Hat' }, { x: 1, y: 'Hi-Hat' }, { x: 2, y: 'Hi-Hat' }, { x: 3, y: 'Hi-Hat' },
-        { x: 4, y: 'Hi-Hat' }, { x: 5, y: 'Hi-Hat' }, { x: 6, y: 'Hi-Hat' }, { x: 7, y: 'Hi-Hat' },
-        { x: 8, y: 'Hi-Hat' }, { x: 9, y: 'Hi-Hat' }, { x: 10, y: 'Hi-Hat' }, { x: 11, y: 'Hi-Hat' },
-        { x: 12, y: 'Hi-Hat' }, { x: 13, y: 'Hi-Hat' }, { x: 14, y: 'Hi-Hat' }, { x: 15, y: 'Hi-Hat' },
-      ],
-      noteSequence: '',
-      volume: 1.0,
-      delaySend: 0.1
-    },
-    { id: 'guitar', name: 'Guitarra', instrumentType: 'guitar', notes: [], noteSequence: '', volume: 0.6, delaySend: 0.4 },
-    { id: '16bit-synth', name: '16-Bit', instrumentType: '16bit', notes: [], noteSequence: '', volume: 0.8, delaySend: 0.2 },
-  ]);
-  const [activeTrackId, setActiveTrackId] = useState('melody');
+  const [trackDefinitions, setTrackDefinitions] = useState(
+    'v=8 [synth=sol,sol,mi,fa,fa,mi,re,do,re,re,re,mi,mi,mi,fa,fa,fa,sol,sol,fa,mi,re,do], ' +
+    'v=6 [piano=do4-mi4-sol4,-,do4-mi4-sol4,-,re4-fa4-la4,-,re4-fa4-la4,-,mi4-sol4-si4,-,mi4-sol4-si4,-,fa4-la4-do5,-,fa4-la4-do5,-], ' +
+    'v=7 [8bit=do,-,do,-,mi,-,mi,-,fa,-,fa,-,sol,-,sol,-,la,-,la,-,si,-,si,-,do5,-,do5,-], ' +
+    'v=10 [drums=kick,-,snare,-,kick,-,snare,-,kick,-,snare,-,kick,-,snare,-,kick,hihat,hihat,hihat,snare,hihat,hihat,hihat]'
+  );
   const [prompt, setPrompt] = useState('crear una melodía alegre y optimista');
   const [statusMessage, setStatusMessage] = useState('');
   const [error, setError] = useState(null);
@@ -75,7 +29,7 @@ const App = () => {
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [projectNotes, setProjectNotes] = useState('Notas de la canción "Zombies on Your Lawn" pre-cargadas.');
-
+  
   // --- Referencias para el Web Audio API
   const audioContextRef = useRef(null);
   const playLoopRef = useRef(null);
@@ -90,24 +44,16 @@ const App = () => {
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   // --- Constantes para la cuadrícula y sonidos
-  const synthNotes = ['C5', 'B4', 'A4', 'G4', 'F4', 'E4', 'D4', 'C4'];
-  const drumNotes = ['Kick', 'Snare', 'Hi-Hat'];
-  const noteNames = {
-      synth: synthNotes,
-      drums: drumNotes,
-      piano: synthNotes,
-      guitar: synthNotes,
-      '8bit': synthNotes,
-      '16bit': synthNotes,
-  };
   const noteMapping = {
     'do': 'C4', 'do4': 'C4', 're': 'D4', 'mi': 'E4', 'fa': 'F4',
     'sol': 'G4', 'la': 'A4', 'si': 'B4', 'do5': 'C5',
-    're4': 'D4', 'mi4': 'E4', 'fa4': 'F4', 'sol4': 'G4', 'la4': 'A4', 'si4': 'B4'
+    're4': 'D4', 'mi4': 'E4', 'fa4': 'F4', 'sol4': 'G4', 'la4': 'A4', 'si4': 'B4',
+    'kick': 'Kick', 'snare': 'Snare', 'hihat': 'Hi-Hat', '-': null,
   };
   const noteMappingInverse = {
       'C4': 'Do', 'D4': 'Re', 'E4': 'Mi', 'F4': 'Fa',
-      'G4': 'Sol', 'A4': 'La', 'B4': 'Si', 'C5': 'Do5'
+      'G4': 'Sol', 'A4': 'La', 'B4': 'Si', 'C5': 'Do5',
+      'Kick': 'kick', 'Snare': 'snare', 'Hi-Hat': 'hihat', null: '-',
   };
   const gridLength = 16;
   const frequencies = {
@@ -315,14 +261,51 @@ const App = () => {
   }, []);
 
   /**
+   * Parsea una cadena de definición de pista para obtener los datos de la pista.
+   * Formato esperado: "v=[volumen] [instrumento]=[notas]"
+   */
+  const parseSingleTrackDefinition = (definition) => {
+    const parts = definition.split(' ');
+    let volume = 0.5;
+    let instrumentType = 'synth';
+    let noteSequence = '';
+
+    parts.forEach(part => {
+      if (part.startsWith('v=')) {
+        const vol = parseInt(part.substring(2), 10);
+        if (!isNaN(vol)) {
+          volume = vol / 10;
+        }
+      } else if (part.includes('=')) {
+        const [inst, notes] = part.split('=');
+        instrumentType = inst.trim();
+        noteSequence = notes.replace(/[[\]]/g, '').trim();
+      }
+    });
+
+    return { volume, instrumentType, noteSequence };
+  };
+  
+  /**
+   * Parsea una cadena de múltiples definiciones de pista separadas por comas.
+   */
+  const parseAllTrackDefinitions = (definitionsString) => {
+    return definitionsString
+      .split(',')
+      .map(def => def.trim())
+      .filter(def => def.length > 0);
+  };
+
+  /**
    * Reproduce una nota musical o un sonido de batería.
    */
-  const playSound = (instrumentType, noteName, volume, delaySend, duration, context = audioContextRef.current, time = context.currentTime) => {
+  const playSound = (instrumentType, noteName, volume, duration, context = audioContextRef.current, time = context.currentTime) => {
     if (!context || !noteName) return;
 
     let finalOutputNode;
 
     const frequency = frequencies[noteName];
+    const delaySend = 0.2; // Valor de delay fijo para simplificar
 
     if (instrumentType === 'synth' || instrumentType === 'piano' || instrumentType === 'guitar' || instrumentType === '8bit' || instrumentType === '16bit') {
       if (!frequency) return;
@@ -412,48 +395,50 @@ const App = () => {
   const startPlayback = () => {
     stopPlayback();
     
-    let index = 0;
+    const parsedTracks = parseAllTrackDefinitions(trackDefinitions);
+    if (parsedTracks.length === 0) {
+      setStatusMessage('No hay pistas para reproducir.');
+      return;
+    }
+
     const intervalTime = 60000 / bpm / 4;
     const noteDuration = intervalTime / 1000 * 0.9;
     
     delayNodeRef.current.delayTime.value = 60 / bpm * 0.5;
 
     playLoopRef.current = setInterval(() => {
-      tracks.forEach(track => {
-        masterGainNodeRef.current.gain.value = track.volume;
-        feedbackGainRef.current.gain.value = track.delaySend;
+      parsedTracks.forEach(trackDef => {
+        const { volume, instrumentType, noteSequence } = parseSingleTrackDefinition(trackDef);
+        
+        masterGainNodeRef.current.gain.value = volume;
+        feedbackGainRef.current.gain.value = 0.2; // Delay fijo para simplificar
 
-        const parsedSequence = track.noteSequence
+        const parsedSequence = noteSequence
           .toLowerCase()
           .split(/[\s,]+/)
           .map(note => note.trim())
           .filter(note => note !== '');
         
         if (parsedSequence.length > 0) {
-          const currentNote = parsedSequence[index];
+          const currentNote = parsedSequence[playIndexRef.current % parsedSequence.length];
           const mappedNote = noteMapping[currentNote];
           if (mappedNote) {
-            playSound(track.instrumentType, mappedNote, track.volume, track.delaySend, noteDuration);
+            playSound(instrumentType, mappedNote, volume, noteDuration);
+          } else if (currentNote === '-') {
+            // Nota de silencio, no hacemos nada
+          } else {
+            console.warn(`Nota no reconocida o inválida: ${currentNote}`);
           }
-        } else {
-          track.notes.forEach(note => {
-            if (note.x === index) {
-              playSound(track.instrumentType, note.y, track.volume, track.delaySend, noteDuration);
-            }
-          });
         }
       });
-
-      playIndexRef.current = index;
       
-      // La longitud del bucle se basa en la pista de mayor duración
-      const maxLength = tracks.reduce((max, track) => {
-        const sequenceLength = track.noteSequence.toLowerCase().split(/[\s,]+/).filter(s => s !== '').length;
-        const gridNotesLength = Math.max(...track.notes.map(note => note.x), 0) + 1;
-        return Math.max(max, sequenceLength, gridNotesLength);
+      const maxLength = parsedTracks.reduce((max, def) => {
+        const { noteSequence } = parseSingleTrackDefinition(def);
+        const sequenceLength = noteSequence.toLowerCase().split(/[\s,]+/).filter(s => s !== '').length;
+        return Math.max(max, sequenceLength);
       }, gridLength);
       
-      index = (index + 1) % maxLength;
+      playIndexRef.current = (playIndexRef.current + 1) % maxLength;
 
     }, intervalTime);
   };
@@ -469,39 +454,6 @@ const App = () => {
   };
   
   /**
-   * Reinicia la cuadrícula de la pista activa.
-   */
-  const resetGrid = () => {
-    const newTracks = tracks.map(track => {
-      if (track.id === activeTrackId) {
-        return { ...track, notes: [], noteSequence: '' };
-      }
-      return track;
-    });
-    setTracks(newTracks);
-  };
-
-  /**
-   * Maneja el clic en la cuadrícula para añadir o eliminar notas en la pista activa.
-   */
-  const handleGridClick = (x, y) => {
-    const newTracks = tracks.map(track => {
-      if (track.id === activeTrackId) {
-        const existingNoteIndex = track.notes.findIndex(note => note.x === x && note.y === y);
-        if (existingNoteIndex > -1) {
-          const newNotes = [...track.notes];
-          newNotes.splice(existingNoteIndex, 1);
-          return { ...track, notes: newNotes };
-        } else {
-          return { ...track, notes: [...track.notes, { x, y }] };
-        }
-      }
-      return track;
-    });
-    setTracks(newTracks);
-  };
-
-  /**
    * Llama a la API de Gemini para generar una nueva secuencia musical para la pista activa.
    */
   const generateMusic = async () => {
@@ -510,34 +462,15 @@ const App = () => {
     stopPlayback();
 
     try {
-      const activeTrack = tracks.find(t => t.id === activeTrackId);
-      const currentNotesString = activeTrack.notes.map(note => `${noteMappingInverse[note.y] || note.y} en la posición ${note.x}`).join(', ');
-      const userPrompt = `Dada la siguiente secuencia musical: "${currentNotesString}". ${prompt}. Responde con una nueva secuencia de notas musicales en formato JSON. Las notas deben ser del tipo C4, D4, etc.`;
+      const userPrompt = `${prompt}. Responde con una sola línea de texto que contenga todas las pistas. Cada pista debe tener el formato 'v=[volumen 0-10] [instrumento]=[notas separadas por comas]' y estar separada de las demás por una coma. Por ejemplo: v=8 [synth=sol,sol,mi,fa],v=6 [piano=C4,D4,E4],v=10 [drums=kick,snare]`;
 
       const chatHistory = [{ role: "user", parts: [{ text: userPrompt }] }];
       const payload = {
         contents: chatHistory,
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                x: { type: "INTEGER" },
-                y: { type: "STRING" }
-              },
-              required: ["x", "y"]
-            }
-          }
-        }
       };
       
-      let apiKey = typeof __api_key !== 'undefined' ? __api_key : "";
-      if (!apiKey) {
-        apiKey = "";
-      }
-
+      const apiKey = typeof __api_key !== 'undefined' ? __api_key : "";
+      
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
       
       const response = await fetch(apiUrl, {
@@ -547,28 +480,18 @@ const App = () => {
       });
 
       if (!response.ok) {
-        console.error('API Response was not OK:', response.status, response.statusText);
         const errorData = await response.json().catch(() => ({}));
-        console.error('API Error Details:', errorData);
         throw new Error(`Error en la API: ${response.statusText} (${response.status}) - ${JSON.stringify(errorData)}`);
       }
 
       const result = await response.json();
       
-      const json = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!json) {
-        console.error('La respuesta de la IA está vacía o es inválida:', result);
+      const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
         throw new Error('La respuesta de la IA está vacía o es inválida.');
       }
 
-      const parsedJson = JSON.parse(json);
-      if (!Array.isArray(parsedJson)) {
-        console.error('La respuesta de la IA no es un array válido:', parsedJson);
-        throw new Error('La respuesta de la IA no es un array válido.');
-      }
-
-      const newTracks = tracks.map(track => track.id === activeTrackId ? { ...track, notes: parsedJson, noteSequence: '' } : track);
-      setTracks(newTracks);
+      setTrackDefinitions(text.trim());
       setStatusMessage('¡Música generada con éxito!');
     } catch (e) {
       console.error(e);
@@ -588,7 +511,7 @@ const App = () => {
     try {
       const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
       const docRef = doc(db, `artifacts/${appId}/users/${userId}/projects/${projectId}`);
-      await setDoc(docRef, { tracks, bpm, projectNotes });
+      await setDoc(docRef, { trackDefinitions, bpm, projectNotes });
       setStatusMessage(`Proyecto "${projectId}" guardado con éxito.`);
     } catch (e) {
       console.error(e);
@@ -610,7 +533,7 @@ const App = () => {
       onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setTracks(data.tracks || []);
+          setTrackDefinitions(data.trackDefinitions || '');
           setBpm(data.bpm || 120);
           setProjectNotes(data.projectNotes || '');
           setStatusMessage(`Proyecto "${projectId}" cargado con éxito.`);
@@ -633,11 +556,23 @@ const App = () => {
     stopPlayback();
 
     try {
-      const duration = (60 / bpm * gridLength * 4);
+      const parsedTracks = parseAllTrackDefinitions(trackDefinitions);
+      if (parsedTracks.length === 0) {
+        throw new Error('No hay pistas para exportar.');
+      }
+      
+      const maxLength = parsedTracks.reduce((max, def) => {
+        const { noteSequence } = parseSingleTrackDefinition(def);
+        const sequenceLength = noteSequence.toLowerCase().split(/[\s,]+/).filter(s => s !== '').length;
+        return Math.max(max, sequenceLength);
+      }, gridLength);
+      const duration = (60 / bpm * maxLength);
+      
       const offlineContext = new OfflineAudioContext(2, audioContextRef.current.sampleRate * duration, audioContextRef.current.sampleRate);
       
-      tracks.forEach(track => {
-        const parsedSequence = track.noteSequence
+      parsedTracks.forEach(trackDef => {
+        const { volume, instrumentType, noteSequence } = parseSingleTrackDefinition(trackDef);
+        const parsedSequence = noteSequence
           .toLowerCase()
           .split(/[\s,]+/)
           .map(note => note.trim())
@@ -650,18 +585,8 @@ const App = () => {
                 const mappedNote = noteMapping[val];
                 if (mappedNote) {
                     const time = (60 / bpm / 4) * index;
-                    playSound(track.instrumentType, mappedNote, track.volume, track.delaySend, noteDuration, offlineContext, time);
+                    playSound(instrumentType, mappedNote, volume, noteDuration, offlineContext, time);
                 }
-            });
-        } else {
-            const trackNotes = track.notes;
-            const instrumentType = track.instrumentType;
-            const trackVolume = track.volume;
-            const trackDelay = track.delaySend;
-
-            trackNotes.forEach(note => {
-              const time = (60 / bpm / 4) * note.x;
-              playSound(instrumentType, note.y, trackVolume, trackDelay, noteDuration, offlineContext, time);
             });
         }
       });
@@ -791,95 +716,18 @@ const App = () => {
                     className="w-20 bg-gray-900 text-white border border-gray-600 rounded-xl px-2 py-1 text-center focus:outline-none focus:ring-2 focus:ring-teal-400"
                 />
             </div>
-            {/* Pestañas de las pistas */}
-            <div className="flex flex-1 justify-center gap-2 flex-wrap">
-                {tracks.map(track => (
-                    <button
-                        key={track.id}
-                        onClick={() => setActiveTrackId(track.id)}
-                        className={`px-4 py-2 rounded-xl font-bold transition-all duration-300 ease-in-out transform hover:scale-105 ${
-                            activeTrackId === track.id
-                                ? 'bg-purple-600 text-white'
-                                : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
-                        }`}
-                    >
-                        {track.name}
-                    </button>
-                ))}
-            </div>
         </div>
 
-        {/* Controles de la pista activa */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-4 items-center">
-            <div className="flex items-center gap-2">
-                <label className="text-gray-400">Volumen:</label>
-                <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={tracks.find(t => t.id === activeTrackId)?.volume || 0}
-                    onChange={(e) => {
-                        const newVolume = parseFloat(e.target.value);
-                        setTracks(tracks.map(t => t.id === activeTrackId ? { ...t, volume: newVolume } : t));
-                    }}
-                    className="w-full"
-                />
-            </div>
-            <div className="flex items-center gap-2">
-                <label className="text-gray-400">Delay:</label>
-                <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={tracks.find(t => t.id === activeTrackId)?.delaySend || 0}
-                    onChange={(e) => {
-                        const newDelaySend = parseFloat(e.target.value);
-                        setTracks(tracks.map(t => t.id === activeTrackId ? { ...t, delaySend: newDelaySend } : t));
-                    }}
-                    className="w-full"
-                />
-            </div>
-        </div>
-        
-        {/* Sección de Secuencia de Notas (Texto) */}
-        <div className="mt-8">
-            <h2 className="text-2xl font-bold text-center text-teal-400 mb-4">Secuencia de Notas (Texto)</h2>
-            <textarea
-                id="noteSequence"
-                value={tracks.find(t => t.id === activeTrackId)?.noteSequence || ''}
-                onChange={(e) => {
-                    const newTracks = tracks.map(track => track.id === activeTrackId ? { ...track, noteSequence: e.target.value } : track);
-                    setTracks(newTracks);
-                }}
-                className="w-full h-16 p-4 bg-gray-900 text-white border border-gray-600 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-400 transition-colors"
-                placeholder="Ej: Do, Re, Mi, Fa, Sol, La, Si, Do5"
-            />
-        </div>
+        <h2 className="text-2xl font-bold text-center text-teal-400 mb-4">Definiciones de Pista (Formato de Cadena Única)</h2>
+        <textarea
+            value={trackDefinitions}
+            onChange={(e) => setTrackDefinitions(e.target.value)}
+            className="w-full h-40 p-4 bg-gray-900 text-white border border-gray-600 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-400 transition-colors"
+            placeholder="Ej: v=8 [synth=sol,sol,mi,fa], v=6 [piano=C4,D4,E4]"
+        />
 
-        {/* Cuadrícula de notas */}
-        <div className="flex flex-col gap-1 mb-6 p-2 rounded-xl bg-gray-900 shadow-inner mt-4">
-          {noteNames[tracks.find(t => t.id === activeTrackId)?.instrumentType]?.map((noteName, y) => (
-            <div key={noteName} className="flex gap-1 h-8">
-              <div className="flex items-center justify-start text-sm text-gray-400 w-16">{noteMappingInverse[noteName] || noteName}</div>
-              {Array.from({ length: gridLength }).map((_, x) => (
-                <div
-                  key={x}
-                  onClick={() => handleGridClick(x, noteName)}
-                  className={`flex-1 rounded-md transition-all duration-150 ease-in-out cursor-pointer ${
-                    tracks.find(t => t.id === activeTrackId)?.notes.some(note => note.x === x && note.y === noteName)
-                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 transform scale-110 shadow-lg'
-                      : 'bg-gray-700 hover:bg-gray-600'
-                  } ${playLoopRef.current && playIndexRef.current === x ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-gray-900' : ''}`}
-                ></div>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        {/* Controles y prompt */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-4">
+        {/* Controles de reproducción y prompt */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-4 mt-8">
           <input
             type="text"
             value={prompt}
@@ -903,12 +751,6 @@ const App = () => {
               className="flex-1 sm:flex-initial w-full sm:w-auto px-6 py-3 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/50 transition-all duration-300 ease-in-out transform hover:scale-105"
             >
               Generar con IA
-            </button>
-            <button
-              onClick={resetGrid}
-              className="flex-1 sm:flex-initial w-full sm:w-auto px-6 py-3 rounded-xl font-bold bg-orange-600 hover:bg-orange-700 text-white shadow-orange-500/50 transition-all duration-300 ease-in-out transform hover:scale-105"
-            >
-              Reiniciar Cuadrícula
             </button>
           </div>
         </div>
