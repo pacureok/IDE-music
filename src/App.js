@@ -6,17 +6,17 @@ import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 /* eslint-disable no-undef */
 
 /**
- * Main application component.
- * Allows users to create music with a sequencer, generate melodies with AI, and manipulate audio files.
- * Also includes functionalities to save and load projects using Firestore.
+ * Componente principal de la aplicación.
+ * Permite a los usuarios crear música usando un secuenciador, generar melodías con IA y manipular archivos de audio.
+ * También incluye funcionalidades para guardar y cargar proyectos usando Firestore.
  */
 const App = () => {
-  // --- Application state
+  // --- Estados de la aplicación
   const [trackDefinitions, setTrackDefinitions] = useState(
     'v=8 [synth=sol,sol,mi,fa,fa,mi,re,do,re,re,re,mi,mi,mi,fa,fa,fa,sol,sol,fa,mi,re,do], ' +
     'v=6 [piano=do4-mi4-sol4,-,do4-mi4-sol4,-,re4-fa4-la4,-,re4-fa4-la4,-,mi4-sol4-si4,-,mi4-sol4-si4,-,fa4-la4-do5,-,fa4-la4-do5,-], ' +
     'v=7 [8bit=do,-,do,-,mi,-,mi,-,fa,-,fa,-,sol,-,sol,-,la,-,la,-,si,-,si,-,do5,-,do5,-], ' +
-    'v=10 [drums=kick,-,snare,-,kick,-,snare,-,kick,-,snare,-,kick,-,snare,-,kick,hihat,hihat,hihat,snare,hihat,hihat,hihat]'
+    'v=10 [drums=kick,-,snare,-,kick,-,snare,-,kick,-,snare,-,kick,hihat,hihat,hihat,snare,hihat,hihat,hihat]'
   );
   const [prompt, setPrompt] = useState('crear una melodía alegre y optimista');
   const [statusMessage, setStatusMessage] = useState('');
@@ -28,8 +28,9 @@ const App = () => {
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [projectNotes, setProjectNotes] = useState('Notas de la canción "Zombies on Your Lawn" pre-cargadas.');
+  const [isPlaying, setIsPlaying] = useState(false);
 
-  // --- Web Audio API references
+  // --- Referencias para el Web Audio API
   const audioContextRef = useRef(null);
   const playLoopRef = useRef(null);
   const playIndexRef = useRef(0);
@@ -37,12 +38,12 @@ const App = () => {
   const delayNodeRef = useRef(null);
   const feedbackGainRef = useRef(null);
 
-  // --- Firebase state and references
+  // --- Estados y referencias de Firebase
   const [db, setDb] = useState(null);
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // --- Grid and sound constants
+  // --- Constantes para la cuadrícula y sonidos
   const noteMapping = {
     'do': 'C4', 'do4': 'C4', 're': 'D4', 'mi': 'E4', 'fa': 'F4',
     'sol': 'G4', 'la': 'A4', 'si': 'B4', 'do5': 'C5',
@@ -55,23 +56,18 @@ const App = () => {
     G4: 392.00, A4: 440.00, B4: 493.88, C5: 523.25
   };
 
-  // Drum sounds - Using noise generators and simple envelopes
+  // Drum sounds - Usamos generadores de ruido y envolventes simples para simular.
   const drumSounds = {
       'Kick': (context) => {
           const osc = context.createOscillator();
           osc.type = 'sine';
-
           const gain = context.createGain();
-
           gain.gain.setValueAtTime(1, context.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.3);
-
           osc.frequency.setValueAtTime(150, context.currentTime);
           osc.frequency.exponentialRampToValueAtTime(0.01, context.currentTime + 0.3);
-
           osc.connect(gain);
           gain.connect(context.destination);
-
           return { source: osc, gain: gain };
       },
       'Snare': (context) => {
@@ -100,117 +96,96 @@ const App = () => {
           }
           noise.buffer = buffer;
           noise.loop = true;
-
           const highPassFilter = context.createBiquadFilter();
           highPassFilter.type = 'highpass';
           highPassFilter.frequency.setValueAtTime(8000, context.currentTime);
-
           const gain = context.createGain();
           gain.gain.setValueAtTime(1, context.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.05);
-
           noise.connect(highPassFilter);
           highPassFilter.connect(gain);
           gain.connect(context.destination);
-
           return { source: noise, gain: gain };
       }
   };
 
   /**
-   * Generates a piano sound.
+   * Genera un sonido de piano.
    */
   const playPianoNote = (context, frequency, time, duration) => {
     const osc = context.createOscillator();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(frequency, time);
-
     const gain = context.createGain();
-
     gain.gain.setValueAtTime(0, time);
     gain.gain.linearRampToValueAtTime(1, time + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-
     osc.connect(gain);
     gain.connect(context.destination);
-
     return { source: osc, gain: gain };
   };
 
   /**
-   * Generates a guitar sound.
+   * Genera un sonido de guitarra.
    */
   const playGuitarNote = (context, frequency, time, duration) => {
     const bufferSize = context.sampleRate;
     const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
     const output = buffer.getChannelData(0);
-
     for (let i = 0; i < bufferSize; i++) {
         output[i] = Math.random() * 2 - 1;
     }
-
     const delay = context.createDelay(1.0);
     delay.delayTime.setValueAtTime(1 / frequency, time);
-
     const filter = context.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(frequency * 2, time);
-
     const noise = context.createBufferSource();
     noise.buffer = buffer;
     noise.loop = true;
-
     const gain = context.createGain();
     gain.gain.setValueAtTime(1, time);
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-
     noise.connect(delay);
     delay.connect(filter);
     filter.connect(delay);
     filter.connect(gain);
     gain.connect(context.destination);
-
     return { source: noise, gain: gain };
   };
 
   /**
-   * Generates an 8-bit sound (square wave).
+   * Genera un sonido de 8-bit (onda cuadrada).
    */
   const play8BitNote = (context, frequency, time, duration) => {
     const osc = context.createOscillator();
     osc.type = 'square';
     osc.frequency.setValueAtTime(frequency, time);
-
     const gain = context.createGain();
     gain.gain.setValueAtTime(1, time);
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-
     osc.connect(gain);
     gain.connect(context.destination);
-
     return { source: osc, gain: gain };
   };
 
   /**
-   * Generates a 16-bit sound (triangle wave).
+   * Genera un sonido de 16-bit (onda triangular).
    */
   const play16BitNote = (context, frequency, time, duration) => {
     const osc = context.createOscillator();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(frequency, time);
-
     const gain = context.createGain();
     gain.gain.setValueAtTime(1, time);
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-
     osc.connect(gain);
     gain.connect(context.destination);
-
     return { source: osc, gain: gain };
   };
 
   /**
-   * Initializes the Web Audio API and Firebase on component mount.
+   * Inicializa el Web Audio API y Firebase al cargar el componente.
    */
   useEffect(() => {
     try {
@@ -219,12 +194,10 @@ const App = () => {
         masterGainNodeRef.current = audioContextRef.current.createGain();
         delayNodeRef.current = audioContextRef.current.createDelay(1.0);
         feedbackGainRef.current = audioContextRef.current.createGain();
-
         delayNodeRef.current.connect(feedbackGainRef.current);
         feedbackGainRef.current.connect(delayNodeRef.current);
         delayNodeRef.current.connect(masterGainNodeRef.current);
         masterGainNodeRef.current.connect(audioContextRef.current.destination);
-
         delayNodeRef.current.delayTime.value = 0.25;
         feedbackGainRef.current.gain.value = 0.4;
       }
@@ -232,10 +205,9 @@ const App = () => {
       setError('El Web Audio API no es compatible con este navegador.');
     }
 
-    // Initialize Firebase
+    // Inicializa Firebase
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
     if (Object.keys(firebaseConfig).length > 0) {
       const app = initializeApp(firebaseConfig);
       setDb(getFirestore(app));
@@ -263,15 +235,14 @@ const App = () => {
   }, []);
 
   /**
-   * Parses a single track definition string.
-   * Expected format: "v=[volume] [instrument]=[notes]"
+   * Parsea una cadena de definición de pista para obtener los datos de la pista.
+   * Formato esperado: "v=[volumen] [instrumento]=[notas]"
    */
   const parseSingleTrackDefinition = (definition) => {
     const parts = definition.split(' ');
     let volume = 0.5;
     let instrumentType = 'synth';
     let noteSequence = '';
-
     parts.forEach(part => {
       if (part.startsWith('v=')) {
         const vol = parseInt(part.substring(2), 10);
@@ -284,12 +255,11 @@ const App = () => {
         noteSequence = notes.replace(/[[\]]/g, '').trim();
       }
     });
-
     return { volume, instrumentType, noteSequence };
   };
 
   /**
-   * Parses a string with multiple track definitions separated by commas.
+   * Parsea una cadena de múltiples definiciones de pista separadas por comas.
    */
   const parseAllTrackDefinitions = (definitionsString) => {
     return definitionsString
@@ -299,20 +269,16 @@ const App = () => {
   };
 
   /**
-   * Plays a musical note or a drum sound.
+   * Reproduce una nota musical o un sonido de batería.
    */
   const playSound = (instrumentType, noteName, volume, duration, context = audioContextRef.current, time = context.currentTime) => {
     if (!context || !noteName) return;
-
     let finalOutputNode;
     const frequency = frequencies[noteName];
-
     if (instrumentType === 'synth' || instrumentType === 'piano' || instrumentType === 'guitar' || instrumentType === '8bit' || instrumentType === '16bit') {
       if (!frequency) return;
-
       const gain = context.createGain();
       gain.gain.value = volume;
-
       let source;
       if (instrumentType === 'synth') {
         const oscillator = context.createOscillator();
@@ -340,7 +306,6 @@ const App = () => {
         bit16Source.connect(bit16Gain);
         bit16Gain.connect(gain);
       }
-
       if (source) {
         source.start(time);
         source.stop(time + duration);
@@ -356,7 +321,6 @@ const App = () => {
     } else {
         return;
     }
-
     if (finalOutputNode) {
       if (context === audioContextRef.current) {
         finalOutputNode.connect(masterGainNodeRef.current);
@@ -366,39 +330,31 @@ const App = () => {
     }
   };
 
-
   /**
-   * Starts the sequencer playback loop.
+   * Inicia la reproducción del secuenciador en un bucle.
    */
   const startPlayback = () => {
     stopPlayback();
-
+    setIsPlaying(true);
     const parsedTracks = parseAllTrackDefinitions(trackDefinitions);
     if (parsedTracks.length === 0) {
       setStatusMessage('No hay pistas para reproducir.');
       return;
     }
-
-    // Ensure audio context is in 'running' state
     if (audioContextRef.current.state === 'suspended') {
       audioContextRef.current.resume();
     }
-
     const intervalTime = 60000 / bpm / 4;
     const noteDuration = intervalTime / 1000 * 0.9;
-
     delayNodeRef.current.delayTime.value = 60 / bpm * 0.5;
-
     playLoopRef.current = setInterval(() => {
       parsedTracks.forEach(trackDef => {
         const { volume, instrumentType, noteSequence } = parseSingleTrackDefinition(trackDef);
-
         const parsedSequence = noteSequence
           .toLowerCase()
           .split(/[\s,]+/)
           .map(note => note.trim())
           .filter(note => note !== '');
-
         if (parsedSequence.length > 0) {
           const currentNote = parsedSequence[playIndexRef.current % parsedSequence.length];
           const mappedNote = noteMapping[currentNote];
@@ -411,66 +367,54 @@ const App = () => {
           }
         }
       });
-
       const maxLength = parsedTracks.reduce((max, def) => {
         const { noteSequence } = parseSingleTrackDefinition(def);
         const sequenceLength = noteSequence.toLowerCase().split(/[\s,]+/).filter(s => s !== '').length;
         return Math.max(max, sequenceLength);
       }, gridLength);
-
       playIndexRef.current = (playIndexRef.current + 1) % maxLength;
-
     }, intervalTime);
   };
 
-
   /**
-   * Stops playback.
+   * Detiene la reproducción.
    */
   const stopPlayback = () => {
     clearInterval(playLoopRef.current);
     playLoopRef.current = null;
     playIndexRef.current = 0;
+    setIsPlaying(false);
   };
 
   /**
-   * Calls the Gemini API to generate a new musical sequence.
+   * Llama a la API de Gemini para generar una nueva secuencia musical para la pista activa.
    */
   const generateMusic = async () => {
     setStatusMessage('Generando música con IA...');
     setError(null);
     stopPlayback();
-
     try {
       const userPrompt = `${prompt}. Responde con una sola línea de texto que contenga todas las pistas. Cada pista debe tener el formato 'v=[volumen 0-10] [instrumento]=[notas separadas por comas]' y estar separada de las demás por una coma. Por ejemplo: v=8 [synth=sol,sol,mi,fa],v=6 [piano=C4,D4,E4],v=10 [drums=kick,snare]`;
-
       const chatHistory = [{ role: "user", parts: [{ text: userPrompt }] }];
       const payload = {
         contents: chatHistory,
       };
-
       const apiKey = typeof __api_key !== 'undefined' ? __api_key : "";
-
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(`Error en la API: ${response.statusText} (${response.status}) - ${JSON.stringify(errorData)}`);
       }
-
       const result = await response.json();
-
       const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) {
         throw new Error('La respuesta de la IA está vacía o es inválida.');
       }
-
       setTrackDefinitions(text.trim());
       setStatusMessage('¡Música generada con éxito!');
     } catch (e) {
@@ -480,7 +424,7 @@ const App = () => {
     }
   };
 
-  // --- Firestore functions
+  // --- Funciones de Firestore
   const saveProject = async () => {
     if (!isAuthReady || !userId || !projectId) {
       setStatusMessage('Por favor, ingresa un ID de proyecto válido.');
@@ -529,27 +473,23 @@ const App = () => {
     }
   };
 
-  // --- Functions to export to .WAV
+  // --- Funciones para exportar a .WAV
   const exportToWAV = async () => {
     setIsExporting(true);
     setStatusMessage('Exportando a WAV...');
     stopPlayback();
-
     try {
       const parsedTracks = parseAllTrackDefinitions(trackDefinitions);
       if (parsedTracks.length === 0) {
         throw new Error('No hay pistas para exportar.');
       }
-
       const maxLength = parsedTracks.reduce((max, def) => {
         const { noteSequence } = parseSingleTrackDefinition(def);
         const sequenceLength = noteSequence.toLowerCase().split(/[\s,]+/).filter(s => s !== '').length;
         return Math.max(max, sequenceLength);
       }, gridLength);
       const duration = (60 / bpm * maxLength);
-
       const offlineContext = new OfflineAudioContext(2, audioContextRef.current.sampleRate * duration, audioContextRef.current.sampleRate);
-
       parsedTracks.forEach(trackDef => {
         const { volume, instrumentType, noteSequence } = parseSingleTrackDefinition(trackDef);
         const parsedSequence = noteSequence
@@ -557,9 +497,7 @@ const App = () => {
           .split(/[\s,]+/)
           .map(note => note.trim())
           .filter(note => note !== '');
-
         const noteDuration = (60 / bpm / 4) * 0.9;
-
         if (parsedSequence.length > 0) {
             parsedSequence.forEach((val, index) => {
                 const mappedNote = noteMapping[val];
@@ -570,7 +508,6 @@ const App = () => {
             });
         }
       });
-
       offlineContext.startRendering().then(buffer => {
         const wavBlob = audioBufferToWav(buffer);
         const url = URL.createObjectURL(wavBlob);
@@ -583,7 +520,6 @@ const App = () => {
         setStatusMessage('Archivo .WAV exportado con éxito.');
         setIsExporting(false);
       });
-
     } catch (e) {
       console.error(e);
       setStatusMessage('');
@@ -592,12 +528,11 @@ const App = () => {
     }
   };
 
-  // Helper function to convert AudioBuffer to WAV
+  // Función auxiliar para convertir AudioBuffer a WAV
   const audioBufferToWav = (buffer) => {
       const numChannels = buffer.numberOfChannels;
       const sampleRate = buffer.sampleRate;
       const bufferLength = buffer.length;
-
       let interleaved = new Float32Array(bufferLength * numChannels);
       let offset = 0;
       for (let i = 0; i < bufferLength; i++) {
@@ -605,10 +540,8 @@ const App = () => {
               interleaved[offset++] = buffer.getChannelData(channel)[i];
           }
       }
-
       let dataView = new DataView(new ArrayBuffer(44 + interleaved.length * 2));
       let pos = 0;
-
       dataView.setUint32(pos, 0x46464952, true); pos += 4;
       dataView.setUint32(pos, 36 + interleaved.length * 2, true); pos += 4;
       dataView.setUint32(pos, 0x45564157, true); pos += 4;
@@ -622,7 +555,6 @@ const App = () => {
       dataView.setUint16(pos, 16, true); pos += 2;
       dataView.setUint32(pos, 0x61746164, true); pos += 4;
       dataView.setUint32(pos, interleaved.length * 2, true); pos += 4;
-
       for (let i = 0; i < interleaved.length; i++) {
           let s = Math.max(-1, Math.min(1, interleaved[i]));
           dataView.setInt16(pos, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
@@ -631,11 +563,10 @@ const App = () => {
       return new Blob([dataView], { type: 'audio/wav' });
   };
 
-  // --- Audio editor functions
+  // --- Funciones del editor de audio
   const handleAudioFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file || !audioContextRef.current) return;
-
     setStatusMessage('Cargando y decodificando audio...');
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -652,26 +583,21 @@ const App = () => {
 
   const playTrimmedAudio = () => {
     if (!loadedAudioBuffer || !audioContextRef.current) return;
-
     stopPlayback();
     if (audioContextRef.current.state === 'suspended') {
       audioContextRef.current.resume();
     }
-
     const source = audioContextRef.current.createBufferSource();
     source.buffer = loadedAudioBuffer;
-
     const startOffset = trimStart;
     const duration = trimEnd - trimStart;
-
     const gainNode = audioContextRef.current.createGain();
     gainNode.connect(audioContextRef.current.destination);
-
     source.connect(gainNode);
     source.start(0, startOffset, duration);
   };
 
-  // Render the user interface
+  // Renderiza la interfaz de usuario.
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 text-white p-4 font-sans">
       <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-4xl">
@@ -691,7 +617,8 @@ const App = () => {
           </p>
         )}
 
-        {/* Controles de BPM y Pistas */}
+        {/* Sección de Definiciones de Pista */}
+        <h2 className="text-2xl font-bold text-center text-teal-400 mb-4">Definiciones de Pista (Formato de Cadena Única)</h2>
         <div className="flex flex-col sm:flex-row gap-4 mb-6 items-center">
             <div className="flex items-center gap-2">
                 <label className="text-gray-400">BPM:</label>
@@ -703,8 +630,6 @@ const App = () => {
                 />
             </div>
         </div>
-
-        <h2 className="text-2xl font-bold text-center text-teal-400 mb-4">Definiciones de Pista (Formato de Cadena Única)</h2>
         <textarea
             value={trackDefinitions}
             onChange={(e) => setTrackDefinitions(e.target.value)}
@@ -723,14 +648,14 @@ const App = () => {
           />
           <div className="flex gap-4">
             <button
-              onClick={playLoopRef.current ? stopPlayback : startPlayback}
+              onClick={isPlaying ? stopPlayback : startPlayback}
               className={`flex-1 sm:flex-initial w-full sm:w-auto px-6 py-3 rounded-xl font-bold transition-all duration-300 ease-in-out ${
-                playLoopRef.current
+                isPlaying
                   ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-500/50'
                   : 'bg-green-600 hover:bg-green-700 text-white shadow-green-500/50'
               } transform hover:scale-105`}
             >
-              {playLoopRef.current ? 'Detener' : 'Reproducir'}
+              {isPlaying ? 'Detener' : 'Reproducir'}
             </button>
             <button
               onClick={generateMusic}
