@@ -29,7 +29,7 @@ const App = () => {
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [projectNotes, setProjectNotes] = useState('Notas de la canción "Zombies on Your Lawn" pre-cargadas.');
-  
+
   // --- Referencias para el Web Audio API
   const audioContextRef = useRef(null);
   const playLoopRef = useRef(null);
@@ -50,11 +50,7 @@ const App = () => {
     're4': 'D4', 'mi4': 'E4', 'fa4': 'F4', 'sol4': 'G4', 'la4': 'A4', 'si4': 'B4',
     'kick': 'Kick', 'snare': 'Snare', 'hihat': 'Hi-Hat', '-': null,
   };
-  const noteMappingInverse = {
-      'C4': 'Do', 'D4': 'Re', 'E4': 'Mi', 'F4': 'Fa',
-      'G4': 'Sol', 'A4': 'La', 'B4': 'Si', 'C5': 'Do5',
-      'Kick': 'kick', 'Snare': 'snare', 'Hi-Hat': 'hihat', null: '-',
-  };
+  // La variable 'noteMappingInverse' que causaba el error ha sido eliminada.
   const gridLength = 16;
   const frequencies = {
     C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23,
@@ -66,12 +62,12 @@ const App = () => {
       'Kick': (context) => {
           const osc = context.createOscillator();
           osc.type = 'sine';
-          
+
           const gain = context.createGain();
-          
+
           gain.gain.setValueAtTime(1, context.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.3);
-          
+
           osc.frequency.setValueAtTime(150, context.currentTime);
           osc.frequency.exponentialRampToValueAtTime(0.01, context.currentTime + 0.3);
 
@@ -128,13 +124,13 @@ const App = () => {
     osc.frequency.setValueAtTime(frequency, time);
 
     const gain = context.createGain();
-    
+
     gain.gain.setValueAtTime(0, time);
     gain.gain.linearRampToValueAtTime(1, time + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     osc.connect(gain);
-    
+
     return { source: osc, gain: gain };
   };
 
@@ -149,10 +145,10 @@ const App = () => {
     for (let i = 0; i < bufferSize; i++) {
         output[i] = Math.random() * 2 - 1;
     }
-    
+
     const delay = context.createDelay(1.0);
     delay.delayTime.setValueAtTime(1 / frequency, time);
-    
+
     const filter = context.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(frequency * 2, time);
@@ -169,7 +165,7 @@ const App = () => {
     delay.connect(filter);
     filter.connect(delay);
     filter.connect(gain);
-    
+
     return { source: noise, gain: gain };
   };
 
@@ -186,7 +182,7 @@ const App = () => {
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     osc.connect(gain);
-    
+
     return { source: osc, gain: gain };
   };
 
@@ -203,7 +199,7 @@ const App = () => {
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     osc.connect(gain);
-    
+
     return { source: osc, gain: gain };
   };
 
@@ -285,7 +281,7 @@ const App = () => {
 
     return { volume, instrumentType, noteSequence };
   };
-  
+
   /**
    * Parsea una cadena de múltiples definiciones de pista separadas por comas.
    */
@@ -317,7 +313,7 @@ const App = () => {
 
         const gain = context.createGain();
         gain.gain.value = volume;
-        
+
         oscillator.connect(gain);
         finalOutputNode = gain;
 
@@ -325,7 +321,7 @@ const App = () => {
         oscillator.stop(time + duration);
       } else if (instrumentType === 'piano') {
         const { source, gain } = playPianoNote(context, frequency, time, duration);
-        
+
         const volumeGain = context.createGain();
         volumeGain.gain.value = volume;
         gain.connect(volumeGain);
@@ -355,7 +351,7 @@ const App = () => {
         source.stop(time + duration);
       } else if (instrumentType === '16bit') {
         const { source, gain } = play16BitNote(context, frequency, time, duration);
-        
+
         const volumeGain = context.createGain();
         volumeGain.gain.value = volume;
         gain.connect(volumeGain);
@@ -366,7 +362,7 @@ const App = () => {
       }
     } else if (instrumentType === 'drums') {
       const { source, gain } = drumSounds[noteName](context);
-      
+
       const volumeGain = context.createGain();
       volumeGain.gain.value = volume;
       gain.connect(volumeGain);
@@ -377,7 +373,7 @@ const App = () => {
     } else {
         return;
     }
-    
+
     if (context === audioContextRef.current) {
       finalOutputNode.connect(masterGainNodeRef.current);
       const delayGain = context.createGain();
@@ -394,7 +390,7 @@ const App = () => {
    */
   const startPlayback = () => {
     stopPlayback();
-    
+
     const parsedTracks = parseAllTrackDefinitions(trackDefinitions);
     if (parsedTracks.length === 0) {
       setStatusMessage('No hay pistas para reproducir.');
@@ -403,13 +399,13 @@ const App = () => {
 
     const intervalTime = 60000 / bpm / 4;
     const noteDuration = intervalTime / 1000 * 0.9;
-    
+
     delayNodeRef.current.delayTime.value = 60 / bpm * 0.5;
 
     playLoopRef.current = setInterval(() => {
       parsedTracks.forEach(trackDef => {
         const { volume, instrumentType, noteSequence } = parseSingleTrackDefinition(trackDef);
-        
+
         masterGainNodeRef.current.gain.value = volume;
         feedbackGainRef.current.gain.value = 0.2; // Delay fijo para simplificar
 
@@ -418,7 +414,7 @@ const App = () => {
           .split(/[\s,]+/)
           .map(note => note.trim())
           .filter(note => note !== '');
-        
+
         if (parsedSequence.length > 0) {
           const currentNote = parsedSequence[playIndexRef.current % parsedSequence.length];
           const mappedNote = noteMapping[currentNote];
@@ -431,13 +427,13 @@ const App = () => {
           }
         }
       });
-      
+
       const maxLength = parsedTracks.reduce((max, def) => {
         const { noteSequence } = parseSingleTrackDefinition(def);
         const sequenceLength = noteSequence.toLowerCase().split(/[\s,]+/).filter(s => s !== '').length;
         return Math.max(max, sequenceLength);
       }, gridLength);
-      
+
       playIndexRef.current = (playIndexRef.current + 1) % maxLength;
 
     }, intervalTime);
@@ -452,7 +448,7 @@ const App = () => {
     playLoopRef.current = null;
     playIndexRef.current = 0;
   };
-  
+
   /**
    * Llama a la API de Gemini para generar una nueva secuencia musical para la pista activa.
    */
@@ -468,11 +464,11 @@ const App = () => {
       const payload = {
         contents: chatHistory,
       };
-      
+
       const apiKey = typeof __api_key !== 'undefined' ? __api_key : "";
-      
+
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-      
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -485,7 +481,7 @@ const App = () => {
       }
 
       const result = await response.json();
-      
+
       const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) {
         throw new Error('La respuesta de la IA está vacía o es inválida.');
@@ -560,16 +556,16 @@ const App = () => {
       if (parsedTracks.length === 0) {
         throw new Error('No hay pistas para exportar.');
       }
-      
+
       const maxLength = parsedTracks.reduce((max, def) => {
         const { noteSequence } = parseSingleTrackDefinition(def);
         const sequenceLength = noteSequence.toLowerCase().split(/[\s,]+/).filter(s => s !== '').length;
         return Math.max(max, sequenceLength);
       }, gridLength);
       const duration = (60 / bpm * maxLength);
-      
+
       const offlineContext = new OfflineAudioContext(2, audioContextRef.current.sampleRate * duration, audioContextRef.current.sampleRate);
-      
+
       parsedTracks.forEach(trackDef => {
         const { volume, instrumentType, noteSequence } = parseSingleTrackDefinition(trackDef);
         const parsedSequence = noteSequence
@@ -577,9 +573,9 @@ const App = () => {
           .split(/[\s,]+/)
           .map(note => note.trim())
           .filter(note => note !== '');
-        
+
         const noteDuration = (60 / bpm / 4) * 0.9;
-        
+
         if (parsedSequence.length > 0) {
             parsedSequence.forEach((val, index) => {
                 const mappedNote = noteMapping[val];
@@ -617,7 +613,7 @@ const App = () => {
       const numChannels = buffer.numberOfChannels;
       const sampleRate = buffer.sampleRate;
       const bufferLength = buffer.length;
-      
+
       let interleaved = new Float32Array(bufferLength * numChannels);
       let offset = 0;
       for (let i = 0; i < bufferLength; i++) {
@@ -650,7 +646,7 @@ const App = () => {
       }
       return new Blob([dataView], { type: 'audio/wav' });
   };
-  
+
   // --- Funciones del editor de audio
   const handleAudioFileUpload = async (event) => {
     const file = event.target.files[0];
@@ -672,19 +668,19 @@ const App = () => {
 
   const playTrimmedAudio = () => {
     if (!loadedAudioBuffer || !audioContextRef.current) return;
-    
+
     stopPlayback();
-    
+
     const source = audioContextRef.current.createBufferSource();
     source.buffer = loadedAudioBuffer;
-    
+
     const startOffset = trimStart;
     const duration = trimEnd - trimStart;
 
     source.connect(audioContextRef.current.destination);
     source.start(0, startOffset, duration);
   };
-  
+
   // Renderiza la interfaz de usuario.
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 text-white p-4 font-sans">
