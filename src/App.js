@@ -481,15 +481,27 @@ const App = () => {
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) throw new Error(`Error en la API: ${response.statusText}`);
+      if (!response.ok) {
+        // Mejor manejo de errores: registrar el estado y el texto de la respuesta
+        console.error('API Response was not OK:', response.status, response.statusText);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error Details:', errorData);
+        throw new Error(`Error en la API: ${response.statusText} (${response.status}) - ${JSON.stringify(errorData)}`);
+      }
 
       const result = await response.json();
       
       const json = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!json) throw new Error('La respuesta de la IA está vacía o es inválida.');
+      if (!json) {
+        console.error('La respuesta de la IA está vacía o es inválida:', result);
+        throw new Error('La respuesta de la IA está vacía o es inválida.');
+      }
 
       const parsedJson = JSON.parse(json);
-      if (!Array.isArray(parsedJson)) throw new Error('La respuesta de la IA no es un array válido.');
+      if (!Array.isArray(parsedJson)) {
+        console.error('La respuesta de la IA no es un array válido:', parsedJson);
+        throw new Error('La respuesta de la IA no es un array válido.');
+      }
 
       const newTracks = tracks.map(track => track.id === activeTrackId ? { ...track, notes: parsedJson } : track);
       setTracks(newTracks);
