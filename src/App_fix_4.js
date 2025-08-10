@@ -27,6 +27,8 @@ const App = () => {
   const [loadedAudioBuffer, setLoadedAudioBuffer] = useState(null);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
+  // Nuevo estado para las notas del proyecto
+  const [projectNotes, setProjectNotes] = useState('');
 
   // --- Referencias para el Web Audio API
   const audioContextRef = useRef(null);
@@ -526,8 +528,10 @@ const App = () => {
     setStatusMessage('Guardando proyecto...');
     setError(null);
     try {
-      const docRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects/${projectId}`);
-      await setDoc(docRef, { tracks, bpm });
+      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      const docRef = doc(db, `artifacts/${appId}/users/${userId}/projects/${projectId}`);
+      // Actualizamos el objeto a guardar para incluir las notas del proyecto
+      await setDoc(docRef, { tracks, bpm, projectNotes });
       setStatusMessage(`Proyecto "${projectId}" guardado con éxito.`);
     } catch (e) {
       console.error(e);
@@ -544,12 +548,15 @@ const App = () => {
     setStatusMessage('Cargando proyecto...');
     setError(null);
     try {
-      const docRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects/${projectId}`);
+      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      const docRef = doc(db, `artifacts/${appId}/users/${userId}/projects/${projectId}`);
       onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setTracks(data.tracks || []);
           setBpm(data.bpm || 120);
+          // Cargamos las notas del proyecto, si existen.
+          setProjectNotes(data.projectNotes || '');
           setStatusMessage(`Proyecto "${projectId}" cargado con éxito.`);
         } else {
           setStatusMessage('');
@@ -860,6 +867,18 @@ const App = () => {
                     </div>
                 </div>
             )}
+        </div>
+
+        {/* Sección de Notas del Proyecto */}
+        <div className="mt-8">
+            <h2 className="text-2xl font-bold text-center text-teal-400 mb-4">Notas del Proyecto</h2>
+            <textarea
+                id="projectNotes"
+                value={projectNotes}
+                onChange={(e) => setProjectNotes(e.target.value)}
+                className="w-full h-32 p-4 bg-gray-900 text-white border border-gray-600 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-400 transition-colors"
+                placeholder="Escribe aquí tus ideas, progresiones de acordes o cualquier otra nota sobre tu proyecto..."
+            />
         </div>
 
         {/* Controles de Guardar/Cargar y Exportar */}
