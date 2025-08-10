@@ -6,19 +6,57 @@ import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 // Desactivar temporalmente no-undef para las variables globales del entorno
 /* eslint-disable no-undef */
 
-// El componente principal de la aplicación.
+/**
+ * Componente principal de la aplicación.
+ * Permite a los usuarios crear música usando un secuenciador, generar melodías con IA y manipular archivos de audio.
+ * También incluye funcionalidades para guardar y cargar proyectos usando Firestore.
+ */
 const App = () => {
   // --- Estados de la aplicación
   const [tracks, setTracks] = useState([
-    { id: 'melody', name: 'Melodía', instrumentType: 'synth', notes: [], noteSequence: '', volume: 0.8, delaySend: 0.3 },
-    { id: 'drums', name: 'Batería', instrumentType: 'drums', notes: [], noteSequence: '', volume: 1.0, delaySend: 0.1 },
+    {
+      id: 'melody',
+      name: 'Melodía',
+      instrumentType: 'synth',
+      // Notas de la melodía de "Zombies on Your Lawn"
+      notes: [],
+      noteSequence: 're, do, si, la, si, do, do, si, la, sol, la, si, la, sol, fa, sol, sol, fa, mi, fa, mi, re, mi, do, la, sol',
+      volume: 0.8,
+      delaySend: 0.3
+    },
+    {
+      id: 'drums',
+      name: 'Batería',
+      instrumentType: 'drums',
+      // Patrón de batería simple (Kick y Snare)
+      notes: [
+        { x: 0, y: 'Kick' }, { x: 4, y: 'Kick' }, { x: 8, y: 'Kick' }, { x: 12, y: 'Kick' },
+        { x: 2, y: 'Snare' }, { x: 6, y: 'Snare' }, { x: 10, y: 'Snare' }, { x: 14, y: 'Snare' },
+        { x: 0, y: 'Hi-Hat' }, { x: 1, y: 'Hi-Hat' }, { x: 2, y: 'Hi-Hat' }, { x: 3, y: 'Hi-Hat' },
+        { x: 4, y: 'Hi-Hat' }, { x: 5, y: 'Hi-Hat' }, { x: 6, y: 'Hi-Hat' }, { x: 7, y: 'Hi-Hat' },
+        { x: 8, y: 'Hi-Hat' }, { x: 9, y: 'Hi-Hat' }, { x: 10, y: 'Hi-Hat' }, { x: 11, y: 'Hi-Hat' },
+        { x: 12, y: 'Hi-Hat' }, { x: 13, y: 'Hi-Hat' }, { x: 14, y: 'Hi-Hat' }, { x: 15, y: 'Hi-Hat' },
+      ],
+      noteSequence: '',
+      volume: 1.0,
+      delaySend: 0.1
+    },
+    {
+      id: 'bass',
+      name: 'Bajo',
+      instrumentType: '8bit', // Usamos un sonido 8-bit para el bajo
+      // Notas de una línea de bajo simplificada para la canción
+      notes: [],
+      noteSequence: 'sol, -, -, -, re, -, -, -, mi, -, -, -, do, -, -, -, sol, -, -, -, re, -, -, -, mi, -, -, -, do, -, -, -',
+      volume: 0.7,
+      delaySend: 0.2
+    },
     { id: 'piano', name: 'Piano', instrumentType: 'piano', notes: [], noteSequence: '', volume: 0.7, delaySend: 0.2 },
     { id: 'guitar', name: 'Guitarra', instrumentType: 'guitar', notes: [], noteSequence: '', volume: 0.6, delaySend: 0.4 },
-    { id: '8bit-synth', name: '8-Bit', instrumentType: '8bit', notes: [], noteSequence: '', volume: 0.9, delaySend: 0.1 },
     { id: '16bit-synth', name: '16-Bit', instrumentType: '16bit', notes: [], noteSequence: '', volume: 0.8, delaySend: 0.2 },
   ]);
   const [activeTrackId, setActiveTrackId] = useState('melody');
-  const [prompt, setPrompt] = useState('generar una melodía pegadiza');
+  const [prompt, setPrompt] = useState('crear una melodía alegre y optimista');
   const [statusMessage, setStatusMessage] = useState('');
   const [error, setError] = useState(null);
   const [bpm, setBpm] = useState(120);
@@ -27,7 +65,7 @@ const App = () => {
   const [loadedAudioBuffer, setLoadedAudioBuffer] = useState(null);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
-  const [projectNotes, setProjectNotes] = useState('');
+  const [projectNotes, setProjectNotes] = useState('Notas de la canción "Zombies on Your Lawn" pre-cargadas.');
 
   // --- Referencias para el Web Audio API
   const audioContextRef = useRef(null);
@@ -75,11 +113,9 @@ const App = () => {
           
           const gain = context.createGain();
           
-          // Configuración del envolvente de volumen para el "golpe" inicial.
           gain.gain.setValueAtTime(1, context.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.3);
           
-          // Envolvente de frecuencia para el "pitcheo" descendente del bombo.
           osc.frequency.setValueAtTime(150, context.currentTime);
           osc.frequency.exponentialRampToValueAtTime(0.01, context.currentTime + 0.3);
 
@@ -102,7 +138,6 @@ const App = () => {
           return { source: noise, gain: gain };
       },
       'Hi-Hat': (context) => {
-          // Mejorado para un sonido más realista usando ruido blanco y un filtro pasa altos
           const noise = context.createBufferSource();
           const bufferSize = context.sampleRate;
           const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
@@ -130,10 +165,6 @@ const App = () => {
 
   /**
    * Genera un sonido de piano.
-   * @param {Object} context - El objeto AudioContext.
-   * @param {number} frequency - Frecuencia de la nota.
-   * @param {number} time - Momento de inicio de la nota.
-   * @param {number} duration - Duración de la nota.
    */
   const playPianoNote = (context, frequency, time, duration) => {
     const osc = context.createOscillator();
@@ -142,10 +173,9 @@ const App = () => {
 
     const gain = context.createGain();
     
-    // Envolvente de volumen (ADSR simplificado para piano)
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(1, time + 0.01); // Ataque rápido
-    gain.gain.exponentialRampToValueAtTime(0.001, time + duration); // Larga caída
+    gain.gain.linearRampToValueAtTime(1, time + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     osc.connect(gain);
     
@@ -154,13 +184,8 @@ const App = () => {
 
   /**
    * Genera un sonido de guitarra.
-   * @param {Object} context - El objeto AudioContext.
-   * @param {number} frequency - Frecuencia de la nota.
-   * @param {number} time - Momento de inicio de la nota.
-   * @param {number} duration - Duración de la nota.
    */
   const playGuitarNote = (context, frequency, time, duration) => {
-    // Implementación simplificada de Karplus-Strong
     const bufferSize = context.sampleRate;
     const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
     const output = buffer.getChannelData(0);
@@ -182,7 +207,7 @@ const App = () => {
 
     const gain = context.createGain();
     gain.gain.setValueAtTime(1, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + duration); // Rápida caída
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     noise.connect(delay);
     delay.connect(filter);
@@ -194,10 +219,6 @@ const App = () => {
 
   /**
    * Genera un sonido de 8-bit (onda cuadrada).
-   * @param {Object} context - El objeto AudioContext.
-   * @param {number} frequency - Frecuencia de la nota.
-   * @param {number} time - Momento de inicio de la nota.
-   * @param {number} duration - Duración de la nota.
    */
   const play8BitNote = (context, frequency, time, duration) => {
     const osc = context.createOscillator();
@@ -206,7 +227,7 @@ const App = () => {
 
     const gain = context.createGain();
     gain.gain.setValueAtTime(1, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + duration); // Rápida caída
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     osc.connect(gain);
     
@@ -215,10 +236,6 @@ const App = () => {
 
   /**
    * Genera un sonido de 16-bit (onda triangular).
-   * @param {Object} context - El objeto AudioContext.
-   * @param {number} frequency - Frecuencia de la nota.
-   * @param {number} time - Momento de inicio de la nota.
-   * @param {number} duration - Duración de la nota.
    */
   const play16BitNote = (context, frequency, time, duration) => {
     const osc = context.createOscillator();
@@ -227,14 +244,16 @@ const App = () => {
 
     const gain = context.createGain();
     gain.gain.setValueAtTime(1, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + duration); // Rápida caída
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     osc.connect(gain);
     
     return { source: osc, gain: gain };
   };
 
-  // Inicializa el Web Audio API y Firebase.
+  /**
+   * Inicializa el Web Audio API y Firebase al cargar el componente.
+   */
   useEffect(() => {
     try {
       if (!audioContextRef.current) {
@@ -243,13 +262,11 @@ const App = () => {
         delayNodeRef.current = audioContextRef.current.createDelay(1.0);
         feedbackGainRef.current = audioContextRef.current.createGain();
 
-        // Conecta los nodos de audio
         delayNodeRef.current.connect(feedbackGainRef.current);
         feedbackGainRef.current.connect(delayNodeRef.current);
         delayNodeRef.current.connect(masterGainNodeRef.current);
         masterGainNodeRef.current.connect(audioContextRef.current.destination);
 
-        // Establece el tiempo de delay
         delayNodeRef.current.delayTime.value = 0.25;
         feedbackGainRef.current.gain.value = 0.4;
       }
@@ -289,21 +306,16 @@ const App = () => {
 
   /**
    * Reproduce una nota musical o un sonido de batería.
-   * @param {string} instrumentType - 'synth', 'drums', 'piano', 'guitar', '8bit' o '16bit'.
-   * @param {string} noteName - Nombre de la nota o del sonido.
-   * @param {number} volume - Volumen de la nota (0-1).
-   * @param {number} delaySend - Cantidad de señal enviada al delay (0-1).
-   * @param {number} duration - Duración de la nota en segundos.
    */
   const playSound = (instrumentType, noteName, volume, delaySend, duration, context = audioContextRef.current, time = context.currentTime) => {
     if (!context || !noteName) return;
 
-    let finalOutputNode; // El nodo que será la salida final del instrumento
+    let finalOutputNode;
 
     const frequency = frequencies[noteName];
 
     if (instrumentType === 'synth' || instrumentType === 'piano' || instrumentType === 'guitar' || instrumentType === '8bit' || instrumentType === '16bit') {
-      if (!frequency) return; // Salir si la frecuencia no es válida
+      if (!frequency) return;
 
       if (instrumentType === 'synth') {
         const oscillator = context.createOscillator();
@@ -362,20 +374,17 @@ const App = () => {
     } else if (instrumentType === 'drums') {
       const { source, gain } = drumSounds[noteName](context);
       
-      // Añade un nodo de ganancia adicional para controlar el volumen de la pista
       const volumeGain = context.createGain();
       volumeGain.gain.value = volume;
       gain.connect(volumeGain);
       finalOutputNode = volumeGain;
 
       source.start(time);
-      source.stop(time + 0.5); // Los sonidos de batería son cortos
+      source.stop(time + 0.5);
     } else {
-        // En caso de que el tipo de instrumento no sea reconocido.
         return;
     }
     
-    // Conecta el nodo de salida final al delay y al master gain
     if (context === audioContextRef.current) {
       finalOutputNode.connect(masterGainNodeRef.current);
       const delayGain = context.createGain();
@@ -383,7 +392,6 @@ const App = () => {
       finalOutputNode.connect(delayGain);
       delayGain.connect(delayNodeRef.current);
     } else {
-      // Para offline context, conectar directamente al destino
       finalOutputNode.connect(context.destination);
     }
   };
@@ -392,29 +400,25 @@ const App = () => {
    * Inicia la reproducción del secuenciador en un bucle.
    */
   const startPlayback = () => {
-    stopPlayback(); // Asegura que no haya otro bucle corriendo.
+    stopPlayback();
     
     let index = 0;
-    const intervalTime = 60000 / bpm / 4; // Notas de 16avos.
+    const intervalTime = 60000 / bpm / 4;
     const noteDuration = intervalTime / 1000 * 0.9;
     
-    // Ajusta el delay al BPM
     delayNodeRef.current.delayTime.value = 60 / bpm * 0.5;
 
     playLoopRef.current = setInterval(() => {
       tracks.forEach(track => {
-        // Ajusta el volumen y el delay para la pista actual
         masterGainNodeRef.current.gain.value = track.volume;
         feedbackGainRef.current.gain.value = track.delaySend;
 
-        // NUEVA LÓGICA: Decide si usar la secuencia de texto o la cuadrícula
         const parsedSequence = track.noteSequence
           .toLowerCase()
-          .split(/[\s,]+/) // Separar por comas o espacios
+          .split(/[\s,]+/)
           .map(note => note.trim())
           .filter(note => note !== '');
         
-        // Si hay una secuencia de texto válida para la pista, úsala.
         if (parsedSequence.length > 0) {
           const currentNote = parsedSequence[index];
           const mappedNote = noteMapping[currentNote];
@@ -422,7 +426,6 @@ const App = () => {
             playSound(track.instrumentType, mappedNote, track.volume, track.delaySend, noteDuration);
           }
         } else {
-          // Si no hay secuencia de texto, usa la cuadrícula como antes.
           track.notes.forEach(note => {
             if (note.x === index) {
               playSound(track.instrumentType, note.y, track.volume, track.delaySend, noteDuration);
@@ -448,6 +451,19 @@ const App = () => {
     clearInterval(playLoopRef.current);
     playLoopRef.current = null;
     playIndexRef.current = 0;
+  };
+  
+  /**
+   * Reinicia la cuadrícula de la pista activa.
+   */
+  const resetGrid = () => {
+    const newTracks = tracks.map(track => {
+      if (track.id === activeTrackId) {
+        return { ...track, notes: [], noteSequence: '' };
+      }
+      return track;
+    });
+    setTracks(newTracks);
   };
 
   /**
@@ -504,8 +520,6 @@ const App = () => {
       
       let apiKey = typeof __api_key !== 'undefined' ? __api_key : "";
       if (!apiKey) {
-        // En caso de que la variable de entorno no esté disponible, usar una clave de respaldo.
-        // NOTA: En un entorno de producción, esto no es seguro y solo se usa para fines de demostración.
         apiKey = "";
       }
 
@@ -538,7 +552,7 @@ const App = () => {
         throw new Error('La respuesta de la IA no es un array válido.');
       }
 
-      const newTracks = tracks.map(track => track.id === activeTrackId ? { ...track, notes: parsedJson } : track);
+      const newTracks = tracks.map(track => track.id === activeTrackId ? { ...track, notes: parsedJson, noteSequence: '' } : track);
       setTracks(newTracks);
       setStatusMessage('¡Música generada con éxito!');
     } catch (e) {
@@ -559,7 +573,6 @@ const App = () => {
     try {
       const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
       const docRef = doc(db, `artifacts/${appId}/users/${userId}/projects/${projectId}`);
-      // Actualizamos el objeto a guardar para incluir las notas del proyecto
       await setDoc(docRef, { tracks, bpm, projectNotes });
       setStatusMessage(`Proyecto "${projectId}" guardado con éxito.`);
     } catch (e) {
@@ -584,7 +597,6 @@ const App = () => {
           const data = docSnap.data();
           setTracks(data.tracks || []);
           setBpm(data.bpm || 120);
-          // Cargamos las notas del proyecto, si existen.
           setProjectNotes(data.projectNotes || '');
           setStatusMessage(`Proyecto "${projectId}" cargado con éxito.`);
         } else {
@@ -677,19 +689,19 @@ const App = () => {
       let dataView = new DataView(new ArrayBuffer(44 + interleaved.length * 2));
       let pos = 0;
 
-      dataView.setUint32(pos, 0x46464952, true); pos += 4; // "RIFF"
-      dataView.setUint32(pos, 36 + interleaved.length * 2, true); pos += 4; // file length
-      dataView.setUint32(pos, 0x45564157, true); pos += 4; // "WAVE"
-      dataView.setUint32(pos, 0x20746d66, true); pos += 4; // "fmt " chunk
-      dataView.setUint32(pos, 16, true); pos += 4; // chunk length
-      dataView.setUint16(pos, 1, true); pos += 2; // PCM format
-      dataView.setUint16(pos, numChannels, true); pos += 2; // num channels
-      dataView.setUint32(pos, sampleRate, true); pos += 4; // sample rate
-      dataView.setUint32(pos, sampleRate * numChannels * 2, true); pos += 4; // byte rate
-      dataView.setUint16(pos, numChannels * 2, true); pos += 2; // block align
-      dataView.setUint16(pos, 16, true); pos += 2; // bits per sample
-      dataView.setUint32(pos, 0x61746164, true); pos += 4; // "data" chunk
-      dataView.setUint32(pos, interleaved.length * 2, true); pos += 4; // chunk length
+      dataView.setUint32(pos, 0x46464952, true); pos += 4;
+      dataView.setUint32(pos, 36 + interleaved.length * 2, true); pos += 4;
+      dataView.setUint32(pos, 0x45564157, true); pos += 4;
+      dataView.setUint32(pos, 0x20746d66, true); pos += 4;
+      dataView.setUint32(pos, 16, true); pos += 4;
+      dataView.setUint16(pos, 1, true); pos += 2;
+      dataView.setUint16(pos, numChannels, true); pos += 2;
+      dataView.setUint32(pos, sampleRate, true); pos += 4;
+      dataView.setUint32(pos, sampleRate * numChannels * 2, true); pos += 4;
+      dataView.setUint16(pos, numChannels * 2, true); pos += 2;
+      dataView.setUint16(pos, 16, true); pos += 2;
+      dataView.setUint32(pos, 0x61746164, true); pos += 4;
+      dataView.setUint32(pos, interleaved.length * 2, true); pos += 4;
 
       for (let i = 0; i < interleaved.length; i++) {
           let s = Math.max(-1, Math.min(1, interleaved[i]));
@@ -721,7 +733,7 @@ const App = () => {
   const playTrimmedAudio = () => {
     if (!loadedAudioBuffer || !audioContextRef.current) return;
     
-    stopPlayback(); // Detiene el secuenciador para reproducir el audio.
+    stopPlayback();
     
     const source = audioContextRef.current.createBufferSource();
     source.buffer = loadedAudioBuffer;
@@ -833,7 +845,7 @@ const App = () => {
 
         {/* Cuadrícula de notas */}
         <div className="flex flex-col gap-1 mb-6 p-2 rounded-xl bg-gray-900 shadow-inner mt-4">
-          {noteNames[tracks.find(t => t.id === activeTrackId)?.instrumentType].map((noteName, y) => (
+          {noteNames[tracks.find(t => t.id === activeTrackId)?.instrumentType]?.map((noteName, y) => (
             <div key={noteName} className="flex gap-1 h-8">
               <div className="flex items-center justify-start text-sm text-gray-400 w-16">{noteMappingInverse[noteName] || noteName}</div>
               {Array.from({ length: gridLength }).map((_, x) => (
