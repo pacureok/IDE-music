@@ -109,7 +109,7 @@ const App = () => {
     }
 
     // Inicializa Firebase
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    // La variable 'appId' local ha sido eliminada ya que no se usaba y causaba un error.
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
@@ -704,4 +704,3 @@ const App = () => {
 };
 
 export default App;
-
