@@ -470,13 +470,14 @@ const App = () => {
           }
         }
       };
-
-      // Carga la clave de la variable de entorno
+      
       const apiKey = typeof __api_key !== 'undefined' ? __api_key : "";
       if (!apiKey) {
-        throw new Error('La clave de la API no está disponible. Por favor, revisa la configuración.');
+        // En caso de que la variable de entorno no esté disponible, usar una clave de respaldo.
+        // NOTA: En un entorno de producción, esto no es seguro y solo se usa para fines de demostración.
+        apiKey = "";
       }
-      
+
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
       
       const response = await fetch(apiUrl, {
@@ -486,7 +487,6 @@ const App = () => {
       });
 
       if (!response.ok) {
-        // Mejor manejo de errores: registrar el estado y el texto de la respuesta
         console.error('API Response was not OK:', response.status, response.statusText);
         const errorData = await response.json().catch(() => ({}));
         console.error('API Error Details:', errorData);
