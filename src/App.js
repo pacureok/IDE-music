@@ -109,7 +109,6 @@ const App = () => {
     }
 
     // Inicializa Firebase
-    // La variable 'appId' local ha sido eliminada ya que no se usaba y causaba un error.
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
@@ -481,7 +480,7 @@ const App = () => {
           IDE
           <span className="text-xl"> powered by </span>
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-600">
-            Gemini AI
+            Gemini AI and pacureok
           </span>
         </h1>
         {userId && (
@@ -704,3 +703,4 @@ const App = () => {
 };
 
 export default App;
+
