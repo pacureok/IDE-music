@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 // El componente principal de la aplicación.
 const App = () => {
@@ -10,11 +13,22 @@ const App = () => {
   const [statusMessage, setStatusMessage] = useState('');
   // Estado para el mensaje de error.
   const [error, setError] = useState(null);
+  // Estado para el BPM (ritmo por minuto).
+  const [bpm, setBpm] = useState(120);
+  // Estado para el ID del proyecto a guardar/cargar.
+  const [projectId, setProjectId] = useState('');
   
   // Referencias para el Web Audio API para una reproducción eficiente.
   const audioContextRef = useRef(null);
   const playLoopRef = useRef(null);
   const playIndexRef = useRef(0);
+
+  // Estados de Firebase
+  const [firebaseApp, setFirebaseApp] = useState(null);
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
   // Frecuencias en Hz para un conjunto simple de notas musicales.
   const frequencies = {
@@ -30,14 +44,49 @@ const App = () => {
   const noteNames = ['C5', 'B4', 'A4', 'G4', 'F4', 'E4', 'D4', 'C4'];
   const gridLength = 16; // Número de pasos en el secuenciador.
 
-  // Inicializa el AudioContext al montar el componente para asegurar la funcionalidad de audio.
+  // Inicializa el Web Audio API y Firebase.
   useEffect(() => {
+    // Inicializa Web Audio API
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
       }
     } catch (e) {
       setError('El Web Audio API no es compatible con este navegador.');
+    }
+
+    // Inicializa Firebase
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    if (Object.keys(firebaseConfig).length > 0) {
+      const app = initializeApp(firebaseConfig);
+      setFirebaseApp(app);
+      setDb(getFirestore(app));
+      setAuth(getAuth(app));
+
+      const authInstance = getAuth(app);
+      const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
+        if (user) {
+          setUserId(user.uid);
+        } else if (initialAuthToken) {
+          try {
+            await signInWithCustomToken(authInstance, initialAuthToken);
+          } catch (e) {
+            console.error('Error signing in with custom token:', e);
+          }
+        } else {
+          try {
+            await signInAnonymously(authInstance);
+          } catch (e) {
+            console.error('Error signing in anonymously:', e);
+          }
+        }
+        setIsAuthReady(true);
+      });
+
+      return () => unsubscribe();
     }
   }, []);
 
@@ -72,9 +121,15 @@ const App = () => {
    * Inicia la reproducción del secuenciador en un bucle.
    */
   const startPlayback = () => {
-    setIsPlaying(true);
+    // Si la autenticación no está lista, no iniciar
+    if (!isAuthReady) {
+      setStatusMessage('Iniciando sesión... por favor, espera.');
+      return;
+    }
+
     let index = 0;
-    const intervalTime = 60000 / 120 / 4; // Calcula el intervalo para 120 BPM, notas de 16avos.
+    // Calcula el intervalo en base al BPM
+    const intervalTime = 60000 / bpm / 4; // Notas de 16avos.
     const noteDuration = intervalTime * 0.9;
 
     playLoopRef.current = setInterval(() => {
@@ -97,7 +152,6 @@ const App = () => {
    * Detiene la reproducción del secuenciador.
    */
   const stopPlayback = () => {
-    setIsPlaying(false);
     clearInterval(playLoopRef.current);
     playIndexRef.current = 0;
   };
@@ -106,7 +160,7 @@ const App = () => {
    * Alterna el estado de reproducción (iniciar/detener).
    */
   const handlePlay = () => {
-    if (isPlaying) {
+    if (playLoopRef.current) {
       stopPlayback();
     } else {
       startPlayback();
@@ -128,6 +182,53 @@ const App = () => {
     } else {
       // Añade una nueva nota si no existe.
       setNotes([...notes, { x, y }]);
+    }
+  };
+
+  // Lógica de Firestore
+  const saveProject = async () => {
+    if (!isAuthReady || !userId || !projectId) {
+      setStatusMessage('Por favor, ingresa un ID de proyecto válido y asegúrate de que la autenticación está lista.');
+      return;
+    }
+    setStatusMessage('Guardando proyecto...');
+    setError(null);
+    try {
+      const docRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects/${projectId}`);
+      await setDoc(docRef, { notes, bpm });
+      setStatusMessage(`Proyecto "${projectId}" guardado con éxito.`);
+    } catch (e) {
+      console.error(e);
+      setStatusMessage('');
+      setError(`Error al guardar el proyecto: ${e.message}`);
+    }
+  };
+
+  const loadProject = async () => {
+    if (!isAuthReady || !userId || !projectId) {
+      setStatusMessage('Por favor, ingresa un ID de proyecto válido y asegúrate de que la autenticación está lista.');
+      return;
+    }
+    setStatusMessage('Cargando proyecto...');
+    setError(null);
+    try {
+      const docRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects/${projectId}`);
+      // Escuchar cambios en tiempo real
+      onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setNotes(data.notes || []);
+          setBpm(data.bpm || 120);
+          setStatusMessage(`Proyecto "${projectId}" cargado con éxito.`);
+        } else {
+          setStatusMessage('');
+          setError(`El proyecto con ID "${projectId}" no existe.`);
+        }
+      });
+    } catch (e) {
+      console.error(e);
+      setStatusMessage('');
+      setError(`Error al cargar el proyecto: ${e.message}`);
     }
   };
 
@@ -214,7 +315,11 @@ const App = () => {
             Gemini AI
           </span>
         </h1>
-
+        {userId && (
+          <p className="text-xs text-gray-500 text-center mb-4 truncate">
+            ID de Usuario: {userId}
+          </p>
+        )}
         {/* Cuadrícula de notas */}
         <div className="flex flex-col gap-1 mb-6 p-2 rounded-xl bg-gray-900 shadow-inner">
           {noteNames.map((noteName, y) => (
@@ -236,7 +341,7 @@ const App = () => {
         </div>
 
         {/* Controles y prompt */}
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-4 mb-4">
           <input
             type="text"
             value={prompt}
@@ -248,12 +353,12 @@ const App = () => {
             <button
               onClick={handlePlay}
               className={`flex-1 sm:flex-initial w-full sm:w-auto px-6 py-3 rounded-xl font-bold transition-all duration-300 ease-in-out ${
-                isPlaying
+                playLoopRef.current
                   ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-500/50'
                   : 'bg-green-600 hover:bg-green-700 text-white shadow-green-500/50'
               } transform hover:scale-105`}
             >
-              {isPlaying ? 'Detener' : 'Reproducir'}
+              {playLoopRef.current ? 'Detener' : 'Reproducir'}
             </button>
             <button
               onClick={generateMusic}
@@ -262,6 +367,38 @@ const App = () => {
               Generar con IA
             </button>
           </div>
+        </div>
+
+        {/* Controles de BPM y Guardar/Cargar */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-4 items-center">
+            <div className="flex items-center gap-2">
+                <label className="text-gray-400">BPM:</label>
+                <input
+                    type="number"
+                    value={bpm}
+                    onChange={(e) => setBpm(Number(e.target.value))}
+                    className="w-20 bg-gray-900 text-white border border-gray-600 rounded-xl px-2 py-1 text-center focus:outline-none focus:ring-2 focus:ring-teal-400"
+                />
+            </div>
+            <input
+                type="text"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                className="flex-1 bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-colors"
+                placeholder="ID del Proyecto (Ej: mi-cancion-1)"
+            />
+            <button
+                onClick={saveProject}
+                className="flex-1 sm:flex-initial w-full sm:w-auto px-6 py-3 rounded-xl font-bold bg-yellow-600 hover:bg-yellow-700 text-white shadow-yellow-500/50 transition-all duration-300 ease-in-out transform hover:scale-105"
+            >
+                Guardar
+            </button>
+            <button
+                onClick={loadProject}
+                className="flex-1 sm:flex-initial w-full sm:w-auto px-6 py-3 rounded-xl font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/50 transition-all duration-300 ease-in-out transform hover:scale-105"
+            >
+                Cargar
+            </button>
         </div>
 
         {/* Mensajes de estado */}
