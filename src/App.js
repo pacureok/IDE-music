@@ -14,6 +14,8 @@ const App = () => {
     { id: 'drums', name: 'Batería', instrumentType: 'drums', notes: [], volume: 1.0, delaySend: 0.1 },
     { id: 'piano', name: 'Piano', instrumentType: 'piano', notes: [], volume: 0.7, delaySend: 0.2 },
     { id: 'guitar', name: 'Guitarra', instrumentType: 'guitar', notes: [], volume: 0.6, delaySend: 0.4 },
+    { id: '8bit-synth', name: '8-Bit', instrumentType: '8bit', notes: [], volume: 0.9, delaySend: 0.1 },
+    { id: '16bit-synth', name: '16-Bit', instrumentType: '16bit', notes: [], volume: 0.8, delaySend: 0.2 },
   ]);
   const [activeTrackId, setActiveTrackId] = useState('melody');
   const [prompt, setPrompt] = useState('generar una melodía pegadiza');
@@ -30,7 +32,7 @@ const App = () => {
   const audioContextRef = useRef(null);
   const playLoopRef = useRef(null);
   const playIndexRef = useRef(0);
-  const gainNodeRef = useRef(null);
+  const masterGainNodeRef = useRef(null);
   const delayNodeRef = useRef(null);
   const feedbackGainRef = useRef(null);
 
@@ -47,6 +49,8 @@ const App = () => {
       drums: drumNotes,
       piano: synthNotes,
       guitar: synthNotes,
+      '8bit': synthNotes,
+      '16bit': synthNotes,
   };
   const gridLength = 16;
   const frequencies = {
@@ -136,9 +140,6 @@ const App = () => {
 
     osc.connect(gain);
     
-    osc.start(time);
-    osc.stop(time + duration);
-
     return { source: osc, gain: gain };
   };
 
@@ -178,11 +179,50 @@ const App = () => {
     delay.connect(filter);
     filter.connect(delay);
     filter.connect(gain);
-
-    noise.start(time);
-    noise.stop(time + duration);
     
     return { source: noise, gain: gain };
+  };
+
+  /**
+   * Genera un sonido de 8-bit (onda cuadrada).
+   * @param {Object} context - El objeto AudioContext.
+   * @param {number} frequency - Frecuencia de la nota.
+   * @param {number} time - Momento de inicio de la nota.
+   * @param {number} duration - Duración de la nota.
+   */
+  const play8BitNote = (context, frequency, time, duration) => {
+    const osc = context.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(frequency, time);
+
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(1, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration); // Rápida caída
+
+    osc.connect(gain);
+    
+    return { source: osc, gain: gain };
+  };
+
+  /**
+   * Genera un sonido de 16-bit (onda triangular).
+   * @param {Object} context - El objeto AudioContext.
+   * @param {number} frequency - Frecuencia de la nota.
+   * @param {number} time - Momento de inicio de la nota.
+   * @param {number} duration - Duración de la nota.
+   */
+  const play16BitNote = (context, frequency, time, duration) => {
+    const osc = context.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(frequency, time);
+
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(1, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration); // Rápida caída
+
+    osc.connect(gain);
+    
+    return { source: osc, gain: gain };
   };
 
   // Inicializa el Web Audio API y Firebase.
@@ -190,15 +230,15 @@ const App = () => {
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        gainNodeRef.current = audioContextRef.current.createGain();
+        masterGainNodeRef.current = audioContextRef.current.createGain();
         delayNodeRef.current = audioContextRef.current.createDelay(1.0);
         feedbackGainRef.current = audioContextRef.current.createGain();
 
         // Conecta los nodos de audio
         delayNodeRef.current.connect(feedbackGainRef.current);
         feedbackGainRef.current.connect(delayNodeRef.current);
-        delayNodeRef.current.connect(gainNodeRef.current);
-        gainNodeRef.current.connect(audioContextRef.current.destination);
+        delayNodeRef.current.connect(masterGainNodeRef.current);
+        masterGainNodeRef.current.connect(audioContextRef.current.destination);
 
         // Establece el tiempo de delay
         delayNodeRef.current.delayTime.value = 0.25;
@@ -240,7 +280,7 @@ const App = () => {
 
   /**
    * Reproduce una nota musical o un sonido de batería.
-   * @param {string} instrumentType - 'synth', 'drums', 'piano', o 'guitar'.
+   * @param {string} instrumentType - 'synth', 'drums', 'piano', 'guitar', '8bit' o '16bit'.
    * @param {string} noteName - Nombre de la nota o del sonido.
    * @param {number} volume - Volumen de la nota (0-1).
    * @param {number} delaySend - Cantidad de señal enviada al delay (0-1).
@@ -249,53 +289,93 @@ const App = () => {
   const playSound = (instrumentType, noteName, volume, delaySend, duration, context = audioContextRef.current, time = context.currentTime) => {
     if (!context) return;
 
-    let sourceNode;
-    let gainNode = context.createGain();
-    gainNode.gain.value = volume;
+    let finalOutputNode; // El nodo que será la salida final del instrumento
 
     if (instrumentType === 'synth') {
       const frequency = frequencies[noteName];
       const oscillator = context.createOscillator();
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(frequency, time);
-      sourceNode = oscillator;
-      sourceNode.connect(gainNode);
+
+      const gain = context.createGain();
+      gain.gain.value = volume;
+      
+      oscillator.connect(gain);
+      finalOutputNode = gain;
+
+      oscillator.start(time);
+      oscillator.stop(time + duration);
     } else if (instrumentType === 'drums') {
       const { source, gain } = drumSounds[noteName](context);
-      sourceNode = source;
-      gainNode.connect(gain);
-      sourceNode.connect(gain);
+      
+      // Añade un nodo de ganancia adicional para controlar el volumen de la pista
+      const volumeGain = context.createGain();
+      volumeGain.gain.value = volume;
+      gain.connect(volumeGain);
+      finalOutputNode = volumeGain;
+
+      source.start(time);
+      source.stop(time + 0.5); // Los sonidos de batería son cortos
     } else if (instrumentType === 'piano') {
       const frequency = frequencies[noteName];
       const { source, gain } = playPianoNote(context, frequency, time, duration);
-      sourceNode = source;
-      gainNode.connect(gain);
-      sourceNode.connect(gain);
+      
+      const volumeGain = context.createGain();
+      volumeGain.gain.value = volume;
+      gain.connect(volumeGain);
+      finalOutputNode = volumeGain;
+
+      source.start(time);
+      source.stop(time + duration);
     } else if (instrumentType === 'guitar') {
       const frequency = frequencies[noteName];
       const { source, gain } = playGuitarNote(context, frequency, time, duration);
-      sourceNode = source;
-      gainNode.connect(gain);
-      sourceNode.connect(gain);
+
+      const volumeGain = context.createGain();
+      volumeGain.gain.value = volume;
+      gain.connect(volumeGain);
+      finalOutputNode = volumeGain;
+
+      source.start(time);
+      source.stop(time + duration);
+    } else if (instrumentType === '8bit') {
+      const frequency = frequencies[noteName];
+      const { source, gain } = play8BitNote(context, frequency, time, duration);
+
+      const volumeGain = context.createGain();
+      volumeGain.gain.value = volume;
+      gain.connect(volumeGain);
+      finalOutputNode = volumeGain;
+
+      source.start(time);
+      source.stop(time + duration);
+    } else if (instrumentType === '16bit') {
+      const frequency = frequencies[noteName];
+      const { source, gain } = play16BitNote(context, frequency, time, duration);
+      
+      const volumeGain = context.createGain();
+      volumeGain.gain.value = volume;
+      gain.connect(volumeGain);
+      finalOutputNode = volumeGain;
+
+      source.start(time);
+      source.stop(time + duration);
     } else {
         // En caso de que el tipo de instrumento no sea reconocido.
         return;
     }
     
-    // Conexión al delay y al master gain
+    // Conecta el nodo de salida final al delay y al master gain
     if (context === audioContextRef.current) {
-      gainNode.connect(gainNodeRef.current); // Conexión a la salida principal
+      finalOutputNode.connect(masterGainNodeRef.current);
       const delayGain = context.createGain();
       delayGain.gain.value = delaySend;
-      gainNode.connect(delayGain);
+      finalOutputNode.connect(delayGain);
       delayGain.connect(delayNodeRef.current);
     } else {
       // Para offline context, conectar directamente al destino
-      gainNode.connect(context.destination);
+      finalOutputNode.connect(context.destination);
     }
-    
-    sourceNode.start(time);
-    sourceNode.stop(time + duration);
   };
 
 
@@ -307,7 +387,7 @@ const App = () => {
     
     let index = 0;
     const intervalTime = 60000 / bpm / 4; // Notas de 16avos.
-    const noteDuration = intervalTime * 0.9;
+    const noteDuration = intervalTime / 1000 * 0.9;
     
     // Ajusta el delay al BPM
     delayNodeRef.current.delayTime.value = 60 / bpm * 0.5;
@@ -315,14 +395,12 @@ const App = () => {
     playLoopRef.current = setInterval(() => {
       tracks.forEach(track => {
         // Ajusta el volumen y el delay para la pista actual
-        const trackVolume = track.volume;
-        const trackDelay = track.delaySend;
-        gainNodeRef.current.gain.value = trackVolume;
-        feedbackGainRef.current.gain.value = trackDelay;
+        masterGainNodeRef.current.gain.value = track.volume;
+        feedbackGainRef.current.gain.value = track.delaySend;
 
         track.notes.forEach(note => {
           if (note.x === index) {
-            playSound(track.instrumentType, note.y, trackVolume, trackDelay, noteDuration / 1000);
+            playSound(track.instrumentType, note.y, track.volume, track.delaySend, noteDuration);
           }
         });
       });
@@ -617,7 +695,7 @@ const App = () => {
                 />
             </div>
             {/* Pestañas de las pistas */}
-            <div className="flex flex-1 justify-center gap-2">
+            <div className="flex flex-1 justify-center gap-2 flex-wrap">
                 {tracks.map(track => (
                     <button
                         key={track.id}
@@ -813,6 +891,7 @@ const App = () => {
             {error}
           </div>
         )}
+
       </div>
     </div>
   );
