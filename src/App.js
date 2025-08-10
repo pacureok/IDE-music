@@ -472,7 +472,11 @@ const App = () => {
       };
 
       // Carga la clave de la variable de entorno
-      const apiKey = "";
+      const apiKey = typeof __api_key !== 'undefined' ? __api_key : "";
+      if (!apiKey) {
+        throw new Error('La clave de la API no está disponible. Por favor, revisa la configuración.');
+      }
+      
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
       
       const response = await fetch(apiUrl, {
