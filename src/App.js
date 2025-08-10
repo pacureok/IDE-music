@@ -473,7 +473,7 @@ const App = () => {
         }
       };
       
-      const apiKey = typeof __api_key !== 'undefined' ? __api_key : "";
+      let apiKey = typeof __api_key !== 'undefined' ? __api_key : "";
       if (!apiKey) {
         // En caso de que la variable de entorno no esté disponible, usar una clave de respaldo.
         // NOTA: En un entorno de producción, esto no es seguro y solo se usa para fines de demostración.
