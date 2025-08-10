@@ -11,7 +11,9 @@ const App = () => {
   // --- Estados de la aplicación
   const [tracks, setTracks] = useState([
     { id: 'melody', name: 'Melodía', instrumentType: 'synth', notes: [], volume: 0.8, delaySend: 0.3 },
-    { id: 'drums', name: 'Batería', instrumentType: 'drums', notes: [], volume: 1.0, delaySend: 0.1 }
+    { id: 'drums', name: 'Batería', instrumentType: 'drums', notes: [], volume: 1.0, delaySend: 0.1 },
+    { id: 'piano', name: 'Piano', instrumentType: 'piano', notes: [], volume: 0.7, delaySend: 0.2 },
+    { id: 'guitar', name: 'Guitarra', instrumentType: 'guitar', notes: [], volume: 0.6, delaySend: 0.4 },
   ]);
   const [activeTrackId, setActiveTrackId] = useState('melody');
   const [prompt, setPrompt] = useState('generar una melodía pegadiza');
@@ -42,7 +44,9 @@ const App = () => {
   const drumNotes = ['Kick', 'Snare', 'Hi-Hat'];
   const noteNames = {
       synth: synthNotes,
-      drums: drumNotes
+      drums: drumNotes,
+      piano: synthNotes,
+      guitar: synthNotes,
   };
   const gridLength = 16;
   const frequencies = {
@@ -52,7 +56,6 @@ const App = () => {
 
   // Drum sounds - Usamos generadores de ruido y envolventes simples para simular.
   const drumSounds = {
-      // Se ha mejorado el sonido del bombo para que suene más realista.
       'Kick': (context) => {
           const osc = context.createOscillator();
           osc.type = 'sine';
@@ -86,13 +89,100 @@ const App = () => {
           return { source: noise, gain: gain };
       },
       'Hi-Hat': (context) => {
-          const osc = context.createOscillator();
-          osc.type = 'sawtooth';
+          // Mejorado para un sonido más realista usando ruido blanco y un filtro pasa altos
+          const noise = context.createBufferSource();
+          const bufferSize = context.sampleRate;
+          const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
+          const output = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+              output[i] = Math.random() * 2 - 1;
+          }
+          noise.buffer = buffer;
+          noise.loop = true;
+
+          const highPassFilter = context.createBiquadFilter();
+          highPassFilter.type = 'highpass';
+          highPassFilter.frequency.setValueAtTime(8000, context.currentTime);
+
           const gain = context.createGain();
-          gain.gain.setValueAtTime(0.5, context.currentTime);
+          gain.gain.setValueAtTime(1, context.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.05);
-          return { source: osc, gain: gain };
+
+          noise.connect(highPassFilter);
+          highPassFilter.connect(gain);
+
+          return { source: noise, gain: gain };
       }
+  };
+
+  /**
+   * Genera un sonido de piano.
+   * @param {Object} context - El objeto AudioContext.
+   * @param {number} frequency - Frecuencia de la nota.
+   * @param {number} time - Momento de inicio de la nota.
+   * @param {number} duration - Duración de la nota.
+   */
+  const playPianoNote = (context, frequency, time, duration) => {
+    const osc = context.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(frequency, time);
+
+    const gain = context.createGain();
+    
+    // Envolvente de volumen (ADSR simplificado para piano)
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(1, time + 0.01); // Ataque rápido
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration); // Larga caída
+
+    osc.connect(gain);
+    
+    osc.start(time);
+    osc.stop(time + duration);
+
+    return { source: osc, gain: gain };
+  };
+
+  /**
+   * Genera un sonido de guitarra.
+   * @param {Object} context - El objeto AudioContext.
+   * @param {number} frequency - Frecuencia de la nota.
+   * @param {number} time - Momento de inicio de la nota.
+   * @param {number} duration - Duración de la nota.
+   */
+  const playGuitarNote = (context, frequency, time, duration) => {
+    // Implementación simplificada de Karplus-Strong
+    const bufferSize = context.sampleRate;
+    const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
+    const output = buffer.getChannelData(0);
+
+    for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+    }
+    
+    const delay = context.createDelay(1.0);
+    delay.delayTime.setValueAtTime(1 / frequency, time);
+    
+    const filter = context.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(frequency * 2, time);
+
+    const noise = context.createBufferSource();
+    noise.buffer = buffer;
+    noise.loop = true;
+
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(1, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration); // Rápida caída
+
+    noise.connect(delay);
+    delay.connect(filter);
+    filter.connect(delay);
+    filter.connect(gain);
+
+    noise.start(time);
+    noise.stop(time + duration);
+    
+    return { source: noise, gain: gain };
   };
 
   // Inicializa el Web Audio API y Firebase.
@@ -150,7 +240,7 @@ const App = () => {
 
   /**
    * Reproduce una nota musical o un sonido de batería.
-   * @param {string} instrumentType - 'synth' o 'drums'.
+   * @param {string} instrumentType - 'synth', 'drums', 'piano', o 'guitar'.
    * @param {string} noteName - Nombre de la nota o del sonido.
    * @param {number} volume - Volumen de la nota (0-1).
    * @param {number} delaySend - Cantidad de señal enviada al delay (0-1).
@@ -169,14 +259,29 @@ const App = () => {
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(frequency, time);
       sourceNode = oscillator;
+      sourceNode.connect(gainNode);
     } else if (instrumentType === 'drums') {
       const { source, gain } = drumSounds[noteName](context);
       sourceNode = source;
       gainNode.connect(gain);
+      sourceNode.connect(gain);
+    } else if (instrumentType === 'piano') {
+      const frequency = frequencies[noteName];
+      const { source, gain } = playPianoNote(context, frequency, time, duration);
+      sourceNode = source;
+      gainNode.connect(gain);
+      sourceNode.connect(gain);
+    } else if (instrumentType === 'guitar') {
+      const frequency = frequencies[noteName];
+      const { source, gain } = playGuitarNote(context, frequency, time, duration);
+      sourceNode = source;
+      gainNode.connect(gain);
+      sourceNode.connect(gain);
+    } else {
+        // En caso de que el tipo de instrumento no sea reconocido.
+        return;
     }
     
-    sourceNode.connect(gainNode);
-
     // Conexión al delay y al master gain
     if (context === audioContextRef.current) {
       gainNode.connect(gainNodeRef.current); // Conexión a la salida principal
@@ -192,6 +297,7 @@ const App = () => {
     sourceNode.start(time);
     sourceNode.stop(time + duration);
   };
+
 
   /**
    * Inicia la reproducción del secuenciador en un bucle.
