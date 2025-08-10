@@ -52,13 +52,23 @@ const App = () => {
 
   // Drum sounds - Usamos generadores de ruido y envolventes simples para simular.
   const drumSounds = {
+      // Se ha mejorado el sonido del bombo para que suene más realista.
       'Kick': (context) => {
           const osc = context.createOscillator();
-          osc.frequency.setValueAtTime(100, context.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(0.01, context.currentTime + 0.5);
+          osc.type = 'sine';
+          
           const gain = context.createGain();
+          
+          // Configuración del envolvente de volumen para el "golpe" inicial.
           gain.gain.setValueAtTime(1, context.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.5);
+          gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.3);
+          
+          // Envolvente de frecuencia para el "pitcheo" descendente del bombo.
+          osc.frequency.setValueAtTime(150, context.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(0.01, context.currentTime + 0.3);
+
+          osc.connect(gain);
+
           return { source: osc, gain: gain };
       },
       'Snare': (context) => {
@@ -703,4 +713,3 @@ const App = () => {
 };
 
 export default App;
-
