@@ -141,21 +141,21 @@ const App = () => {
    * @param {number} delaySend - Cantidad de señal enviada al delay (0-1).
    * @param {number} duration - Duración de la nota en segundos.
    */
-  const playSound = (instrumentType, noteName, volume, delaySend, duration) => {
-    if (!audioContextRef.current) return;
+  const playSound = (instrumentType, noteName, volume, delaySend, duration, context = audioContextRef.current, time = context.currentTime) => {
+    if (!context) return;
 
     let sourceNode;
-    let gainNode = audioContextRef.current.createGain();
+    let gainNode = context.createGain();
     gainNode.gain.value = volume;
 
     if (instrumentType === 'synth') {
       const frequency = frequencies[noteName];
-      const oscillator = audioContextRef.current.createOscillator();
+      const oscillator = context.createOscillator();
       oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(frequency, audioContextRef.current.currentTime);
+      oscillator.frequency.setValueAtTime(frequency, time);
       sourceNode = oscillator;
     } else if (instrumentType === 'drums') {
-      const { source, gain } = drumSounds[noteName](audioContextRef.current);
+      const { source, gain } = drumSounds[noteName](context);
       sourceNode = source;
       gainNode.connect(gain);
     }
@@ -163,14 +163,19 @@ const App = () => {
     sourceNode.connect(gainNode);
 
     // Conexión al delay y al master gain
-    gainNode.connect(gainNodeRef.current); // Conexión a la salida principal
-    const delayGain = audioContextRef.current.createGain();
-    delayGain.gain.value = delaySend;
-    gainNode.connect(delayGain);
-    delayGain.connect(delayNodeRef.current);
+    if (context === audioContextRef.current) {
+      gainNode.connect(gainNodeRef.current); // Conexión a la salida principal
+      const delayGain = context.createGain();
+      delayGain.gain.value = delaySend;
+      gainNode.connect(delayGain);
+      delayGain.connect(delayNodeRef.current);
+    } else {
+      // Para offline context, conectar directamente al destino
+      gainNode.connect(context.destination);
+    }
     
-    sourceNode.start(audioContextRef.current.currentTime);
-    sourceNode.stop(audioContextRef.current.currentTime + duration);
+    sourceNode.start(time);
+    sourceNode.stop(time + duration);
   };
 
   /**
@@ -182,17 +187,17 @@ const App = () => {
     let index = 0;
     const intervalTime = 60000 / bpm / 4; // Notas de 16avos.
     const noteDuration = intervalTime * 0.9;
-    const activeTrack = tracks.find(t => t.id === activeTrackId);
     
-    gainNodeRef.current.gain.value = activeTrack.volume;
-    delayNodeRef.current.delayTime.value = 60 / bpm * 0.5; // Ajusta el delay al BPM
-    feedbackGainRef.current.gain.value = activeTrack.delaySend;
+    // Ajusta el delay al BPM
+    delayNodeRef.current.delayTime.value = 60 / bpm * 0.5;
 
     playLoopRef.current = setInterval(() => {
       tracks.forEach(track => {
         // Ajusta el volumen y el delay para la pista actual
         const trackVolume = track.volume;
         const trackDelay = track.delaySend;
+        gainNodeRef.current.gain.value = trackVolume;
+        feedbackGainRef.current.gain.value = trackDelay;
 
         track.notes.forEach(note => {
           if (note.x === index) {
@@ -268,7 +273,7 @@ const App = () => {
       };
 
       // Carga la clave de la variable de entorno
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = "";
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
       
       const response = await fetch(apiUrl, {
