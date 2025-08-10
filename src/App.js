@@ -18,17 +18,37 @@ const App = () => {
       id: 'melody',
       name: 'Melodía',
       instrumentType: 'synth',
-      // Notas de la melodía de "Zombies on Your Lawn"
+      // Notas de la melodía principal de "Zombies on Your Lawn"
       notes: [],
-      noteSequence: 're, do, si, la, si, do, do, si, la, sol, la, si, la, sol, fa, sol, sol, fa, mi, fa, mi, re, mi, do, la, sol',
+      noteSequence: 'sol, sol, mi, fa, fa, mi, re, do, re, re, re, mi, mi, mi, fa, fa, fa, sol, sol, fa, mi, re, do',
       volume: 0.8,
       delaySend: 0.3
+    },
+    {
+      id: 'harmony',
+      name: 'Armonía (Piano)',
+      instrumentType: 'piano',
+      // Progresión de acordes simple para la canción
+      notes: [],
+      noteSequence: 'do4, mi4, sol4, -, do4, mi4, sol4, -, re4, fa4, la4, -, re4, fa4, la4, -, mi4, sol4, si4, -, mi4, sol4, si4, -, fa4, la4, do5, -, fa4, la4, do5, -',
+      volume: 0.6,
+      delaySend: 0.2
+    },
+    {
+      id: 'bass',
+      name: 'Bajo',
+      instrumentType: '8bit', // Usamos un sonido 8-bit para el bajo
+      // Notas de una línea de bajo más detallada para la canción
+      notes: [],
+      noteSequence: 'do, -, do, -, mi, -, mi, -, fa, -, fa, -, sol, -, sol, -, la, -, la, -, si, -, si, -, do5, -, do5, -',
+      volume: 0.7,
+      delaySend: 0.2
     },
     {
       id: 'drums',
       name: 'Batería',
       instrumentType: 'drums',
-      // Patrón de batería simple (Kick y Snare)
+      // Patrón de batería mejorado con bombo, caja y hi-hat
       notes: [
         { x: 0, y: 'Kick' }, { x: 4, y: 'Kick' }, { x: 8, y: 'Kick' }, { x: 12, y: 'Kick' },
         { x: 2, y: 'Snare' }, { x: 6, y: 'Snare' }, { x: 10, y: 'Snare' }, { x: 14, y: 'Snare' },
@@ -41,17 +61,6 @@ const App = () => {
       volume: 1.0,
       delaySend: 0.1
     },
-    {
-      id: 'bass',
-      name: 'Bajo',
-      instrumentType: '8bit', // Usamos un sonido 8-bit para el bajo
-      // Notas de una línea de bajo simplificada para la canción
-      notes: [],
-      noteSequence: 'sol, -, -, -, re, -, -, -, mi, -, -, -, do, -, -, -, sol, -, -, -, re, -, -, -, mi, -, -, -, do, -, -, -',
-      volume: 0.7,
-      delaySend: 0.2
-    },
-    { id: 'piano', name: 'Piano', instrumentType: 'piano', notes: [], noteSequence: '', volume: 0.7, delaySend: 0.2 },
     { id: 'guitar', name: 'Guitarra', instrumentType: 'guitar', notes: [], noteSequence: '', volume: 0.6, delaySend: 0.4 },
     { id: '16bit-synth', name: '16-Bit', instrumentType: '16bit', notes: [], noteSequence: '', volume: 0.8, delaySend: 0.2 },
   ]);
@@ -92,8 +101,9 @@ const App = () => {
       '16bit': synthNotes,
   };
   const noteMapping = {
-    'do': 'C4', 're': 'D4', 'mi': 'E4', 'fa': 'F4',
-    'sol': 'G4', 'la': 'A4', 'si': 'B4', 'do5': 'C5'
+    'do': 'C4', 'do4': 'C4', 're': 'D4', 'mi': 'E4', 'fa': 'F4',
+    'sol': 'G4', 'la': 'A4', 'si': 'B4', 'do5': 'C5',
+    're4': 'D4', 'mi4': 'E4', 'fa4': 'F4', 'sol4': 'G4', 'la4': 'A4', 'si4': 'B4'
   };
   const noteMappingInverse = {
       'C4': 'Do', 'D4': 'Re', 'E4': 'Mi', 'F4': 'Fa',
@@ -435,11 +445,16 @@ const App = () => {
       });
 
       playIndexRef.current = index;
-      const activeTrack = tracks.find(t => t.id === activeTrackId);
-      const parsedSequenceLength = activeTrack.noteSequence.toLowerCase().split(/[\s,]+/).filter(s => s !== '').length;
-      const totalLength = parsedSequenceLength > 0 ? parsedSequenceLength : gridLength;
+      
+      // La longitud del bucle se basa en la pista de mayor duración
+      const maxLength = tracks.reduce((max, track) => {
+        const sequenceLength = track.noteSequence.toLowerCase().split(/[\s,]+/).filter(s => s !== '').length;
+        const gridNotesLength = Math.max(...track.notes.map(note => note.x), 0) + 1;
+        return Math.max(max, sequenceLength, gridNotesLength);
+      }, gridLength);
+      
+      index = (index + 1) % maxLength;
 
-      index = (index + 1) % totalLength;
     }, intervalTime);
   };
 
