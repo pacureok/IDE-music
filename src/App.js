@@ -3,6 +3,9 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
+// Desactivar temporalmente no-undef para las variables globales del entorno
+/* eslint-disable no-undef */
+
 // El componente principal de la aplicación.
 const App = () => {
   // --- Estados de la aplicación
@@ -17,7 +20,10 @@ const App = () => {
   const [bpm, setBpm] = useState(120);
   const [projectId, setProjectId] = useState('');
   const [isExporting, setIsExporting] = useState(false);
-  
+  const [loadedAudioBuffer, setLoadedAudioBuffer] = useState(null);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+
   // --- Referencias para el Web Audio API
   const audioContextRef = useRef(null);
   const playLoopRef = useRef(null);
@@ -430,6 +436,40 @@ const App = () => {
       return new Blob([dataView], { type: 'audio/wav' });
   };
   
+  // --- Funciones del editor de audio
+  const handleAudioFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file || !audioContextRef.current) return;
+
+    setStatusMessage('Cargando y decodificando audio...');
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+      setLoadedAudioBuffer(audioBuffer);
+      setTrimEnd(audioBuffer.duration);
+      setStatusMessage('Audio cargado con éxito.');
+    } catch (e) {
+      console.error(e);
+      setStatusMessage('');
+      setError(`Error al cargar el audio: ${e.message}`);
+    }
+  };
+
+  const playTrimmedAudio = () => {
+    if (!loadedAudioBuffer || !audioContextRef.current) return;
+    
+    stopPlayback(); // Detiene el secuenciador para reproducir el audio.
+    
+    const source = audioContextRef.current.createBufferSource();
+    source.buffer = loadedAudioBuffer;
+    
+    const startOffset = trimStart;
+    const duration = trimEnd - trimStart;
+
+    source.connect(audioContextRef.current.destination);
+    source.start(0, startOffset, duration);
+  };
+  
   // Renderiza la interfaz de usuario.
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 text-white p-4 font-sans">
@@ -562,8 +602,59 @@ const App = () => {
           </div>
         </div>
 
+        {/* Editor de Audio */}
+        <div className="mt-8">
+            <h2 className="text-2xl font-bold text-center text-yellow-400 mb-4">Editor de Audio</h2>
+            <label className="block text-gray-400 mb-2">Cargar archivo de audio (.wav, .mp3)</label>
+            <input
+                type="file"
+                accept="audio/*"
+                onChange={handleAudioFileUpload}
+                className="block w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-700 file:text-white hover:file:bg-gray-600"
+            />
+            {loadedAudioBuffer && (
+                <div className="mt-4 p-4 bg-gray-900 rounded-xl">
+                    <p className="text-gray-400 mb-2">Archivo cargado: Duración total: {loadedAudioBuffer.duration.toFixed(2)}s</p>
+                    <div className="flex items-center gap-4">
+                        <label className="text-gray-400">Inicio (s):</label>
+                        <input
+                            type="range"
+                            min="0"
+                            max={loadedAudioBuffer.duration}
+                            step="0.01"
+                            value={trimStart}
+                            onChange={(e) => setTrimStart(parseFloat(e.target.value))}
+                            className="flex-1"
+                        />
+                        <span className="text-white">{trimStart.toFixed(2)}s</span>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2">
+                        <label className="text-gray-400">Fin (s):</label>
+                        <input
+                            type="range"
+                            min="0"
+                            max={loadedAudioBuffer.duration}
+                            step="0.01"
+                            value={trimEnd}
+                            onChange={(e) => setTrimEnd(parseFloat(e.target.value))}
+                            className="flex-1"
+                        />
+                        <span className="text-white">{trimEnd.toFixed(2)}s</span>
+                    </div>
+                    <div className="mt-4 flex justify-center">
+                        <button
+                            onClick={playTrimmedAudio}
+                            className="px-6 py-3 rounded-xl font-bold bg-pink-600 hover:bg-pink-700 text-white shadow-pink-500/50 transition-all duration-300 ease-in-out transform hover:scale-105"
+                        >
+                            Reproducir Recorte
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+
         {/* Controles de Guardar/Cargar y Exportar */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-4 items-center">
+        <div className="flex flex-col sm:flex-row gap-4 mb-4 mt-8 items-center">
             <input
                 type="text"
                 value={projectId}
@@ -613,3 +704,4 @@ const App = () => {
 };
 
 export default App;
+
