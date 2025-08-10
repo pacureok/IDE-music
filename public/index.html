@@ -4,14 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music IDE</title>
-    <!-- Incluye el CDN de Tailwind CSS aquí -->
+    <!-- Enlaza a la fuente "Inter" desde Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Incluye el CDN de Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Usa una fuente legible como Inter -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap">
+    <!-- Configuraciones de Tailwind para la fuente "Inter" -->
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              inter: ['Inter', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
 </head>
-<body class="bg-gray-900 font-inter">
-    <!-- El "div" con id="root" es donde React renderiza la app -->
+<body class="bg-gray-900 font-inter antialiased">
+    <!-- El div con id="root" es el contenedor donde React montará la aplicación -->
     <div id="root"></div>
-    <!-- No necesitas un script de JS aquí, ya que el bundler se encarga de eso -->
 </body>
 </html>
