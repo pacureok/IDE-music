@@ -3,16 +3,15 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
-// Desactivar temporalmente no-undef para las variables globales del entorno
 /* eslint-disable no-undef */
 
 /**
- * Componente principal de la aplicación.
- * Permite a los usuarios crear música usando un secuenciador, generar melodías con IA y manipular archivos de audio.
- * También incluye funcionalidades para guardar y cargar proyectos usando Firestore.
+ * Main application component.
+ * Allows users to create music with a sequencer, generate melodies with AI, and manipulate audio files.
+ * Also includes functionalities to save and load projects using Firestore.
  */
 const App = () => {
-  // --- Estados de la aplicación
+  // --- Application state
   const [trackDefinitions, setTrackDefinitions] = useState(
     'v=8 [synth=sol,sol,mi,fa,fa,mi,re,do,re,re,re,mi,mi,mi,fa,fa,fa,sol,sol,fa,mi,re,do], ' +
     'v=6 [piano=do4-mi4-sol4,-,do4-mi4-sol4,-,re4-fa4-la4,-,re4-fa4-la4,-,mi4-sol4-si4,-,mi4-sol4-si4,-,fa4-la4-do5,-,fa4-la4-do5,-], ' +
@@ -30,7 +29,7 @@ const App = () => {
   const [trimEnd, setTrimEnd] = useState(0);
   const [projectNotes, setProjectNotes] = useState('Notas de la canción "Zombies on Your Lawn" pre-cargadas.');
 
-  // --- Referencias para el Web Audio API
+  // --- Web Audio API references
   const audioContextRef = useRef(null);
   const playLoopRef = useRef(null);
   const playIndexRef = useRef(0);
@@ -38,26 +37,25 @@ const App = () => {
   const delayNodeRef = useRef(null);
   const feedbackGainRef = useRef(null);
 
-  // --- Estados y referencias de Firebase
+  // --- Firebase state and references
   const [db, setDb] = useState(null);
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // --- Constantes para la cuadrícula y sonidos
+  // --- Grid and sound constants
   const noteMapping = {
     'do': 'C4', 'do4': 'C4', 're': 'D4', 'mi': 'E4', 'fa': 'F4',
     'sol': 'G4', 'la': 'A4', 'si': 'B4', 'do5': 'C5',
     're4': 'D4', 'mi4': 'E4', 'fa4': 'F4', 'sol4': 'G4', 'la4': 'A4', 'si4': 'B4',
     'kick': 'Kick', 'snare': 'Snare', 'hihat': 'Hi-Hat', '-': null,
   };
-  // La variable 'noteMappingInverse' que causaba el error ha sido eliminada.
   const gridLength = 16;
   const frequencies = {
     C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23,
     G4: 392.00, A4: 440.00, B4: 493.88, C5: 523.25
   };
 
-  // Drum sounds - Usamos generadores de ruido y envolventes simples para simular.
+  // Drum sounds - Using noise generators and simple envelopes
   const drumSounds = {
       'Kick': (context) => {
           const osc = context.createOscillator();
@@ -72,6 +70,7 @@ const App = () => {
           osc.frequency.exponentialRampToValueAtTime(0.01, context.currentTime + 0.3);
 
           osc.connect(gain);
+          gain.connect(context.destination);
 
           return { source: osc, gain: gain };
       },
@@ -87,6 +86,8 @@ const App = () => {
           const gain = context.createGain();
           gain.gain.setValueAtTime(1, context.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.1);
+          noise.connect(gain);
+          gain.connect(context.destination);
           return { source: noise, gain: gain };
       },
       'Hi-Hat': (context) => {
@@ -110,13 +111,14 @@ const App = () => {
 
           noise.connect(highPassFilter);
           highPassFilter.connect(gain);
+          gain.connect(context.destination);
 
           return { source: noise, gain: gain };
       }
   };
 
   /**
-   * Genera un sonido de piano.
+   * Generates a piano sound.
    */
   const playPianoNote = (context, frequency, time, duration) => {
     const osc = context.createOscillator();
@@ -130,12 +132,13 @@ const App = () => {
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     osc.connect(gain);
+    gain.connect(context.destination);
 
     return { source: osc, gain: gain };
   };
 
   /**
-   * Genera un sonido de guitarra.
+   * Generates a guitar sound.
    */
   const playGuitarNote = (context, frequency, time, duration) => {
     const bufferSize = context.sampleRate;
@@ -165,12 +168,13 @@ const App = () => {
     delay.connect(filter);
     filter.connect(delay);
     filter.connect(gain);
+    gain.connect(context.destination);
 
     return { source: noise, gain: gain };
   };
 
   /**
-   * Genera un sonido de 8-bit (onda cuadrada).
+   * Generates an 8-bit sound (square wave).
    */
   const play8BitNote = (context, frequency, time, duration) => {
     const osc = context.createOscillator();
@@ -182,12 +186,13 @@ const App = () => {
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     osc.connect(gain);
+    gain.connect(context.destination);
 
     return { source: osc, gain: gain };
   };
 
   /**
-   * Genera un sonido de 16-bit (onda triangular).
+   * Generates a 16-bit sound (triangle wave).
    */
   const play16BitNote = (context, frequency, time, duration) => {
     const osc = context.createOscillator();
@@ -199,12 +204,13 @@ const App = () => {
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     osc.connect(gain);
+    gain.connect(context.destination);
 
     return { source: osc, gain: gain };
   };
 
   /**
-   * Inicializa el Web Audio API y Firebase al cargar el componente.
+   * Initializes the Web Audio API and Firebase on component mount.
    */
   useEffect(() => {
     try {
@@ -226,7 +232,7 @@ const App = () => {
       setError('El Web Audio API no es compatible con este navegador.');
     }
 
-    // Inicializa Firebase
+    // Initialize Firebase
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
@@ -257,8 +263,8 @@ const App = () => {
   }, []);
 
   /**
-   * Parsea una cadena de definición de pista para obtener los datos de la pista.
-   * Formato esperado: "v=[volumen] [instrumento]=[notas]"
+   * Parses a single track definition string.
+   * Expected format: "v=[volume] [instrument]=[notes]"
    */
   const parseSingleTrackDefinition = (definition) => {
     const parts = definition.split(' ');
@@ -283,7 +289,7 @@ const App = () => {
   };
 
   /**
-   * Parsea una cadena de múltiples definiciones de pista separadas por comas.
+   * Parses a string with multiple track definitions separated by commas.
    */
   const parseAllTrackDefinitions = (definitionsString) => {
     return definitionsString
@@ -293,100 +299,76 @@ const App = () => {
   };
 
   /**
-   * Reproduce una nota musical o un sonido de batería.
+   * Plays a musical note or a drum sound.
    */
   const playSound = (instrumentType, noteName, volume, duration, context = audioContextRef.current, time = context.currentTime) => {
     if (!context || !noteName) return;
 
     let finalOutputNode;
-
     const frequency = frequencies[noteName];
-    const delaySend = 0.2; // Valor de delay fijo para simplificar
 
     if (instrumentType === 'synth' || instrumentType === 'piano' || instrumentType === 'guitar' || instrumentType === '8bit' || instrumentType === '16bit') {
       if (!frequency) return;
 
+      const gain = context.createGain();
+      gain.gain.value = volume;
+
+      let source;
       if (instrumentType === 'synth') {
         const oscillator = context.createOscillator();
         oscillator.type = 'sine';
         oscillator.frequency.setValueAtTime(frequency, time);
-
-        const gain = context.createGain();
-        gain.gain.value = volume;
-
-        oscillator.connect(gain);
-        finalOutputNode = gain;
-
-        oscillator.start(time);
-        oscillator.stop(time + duration);
+        source = oscillator;
       } else if (instrumentType === 'piano') {
-        const { source, gain } = playPianoNote(context, frequency, time, duration);
-
-        const volumeGain = context.createGain();
-        volumeGain.gain.value = volume;
-        gain.connect(volumeGain);
-        finalOutputNode = volumeGain;
-
-        source.start(time);
-        source.stop(time + duration);
+        const { source: pianoSource, gain: pianoGain } = playPianoNote(context, frequency, time, duration);
+        source = pianoSource;
+        pianoSource.connect(pianoGain);
+        pianoGain.connect(gain);
       } else if (instrumentType === 'guitar') {
-        const { source, gain } = playGuitarNote(context, frequency, time, duration);
-
-        const volumeGain = context.createGain();
-        volumeGain.gain.value = volume;
-        gain.connect(volumeGain);
-        finalOutputNode = volumeGain;
-
-        source.start(time);
-        source.stop(time + duration);
+        const { source: guitarSource, gain: guitarGain } = playGuitarNote(context, frequency, time, duration);
+        source = guitarSource;
+        guitarSource.connect(guitarGain);
+        guitarGain.connect(gain);
       } else if (instrumentType === '8bit') {
-        const { source, gain } = play8BitNote(context, frequency, time, duration);
-
-        const volumeGain = context.createGain();
-        volumeGain.gain.value = volume;
-        gain.connect(volumeGain);
-        finalOutputNode = volumeGain;
-
-        source.start(time);
-        source.stop(time + duration);
+        const { source: bit8Source, gain: bit8Gain } = play8BitNote(context, frequency, time, duration);
+        source = bit8Source;
+        bit8Source.connect(bit8Gain);
+        bit8Gain.connect(gain);
       } else if (instrumentType === '16bit') {
-        const { source, gain } = play16BitNote(context, frequency, time, duration);
+        const { source: bit16Source, gain: bit16Gain } = play16BitNote(context, frequency, time, duration);
+        source = bit16Source;
+        bit16Source.connect(bit16Gain);
+        bit16Gain.connect(gain);
+      }
 
-        const volumeGain = context.createGain();
-        volumeGain.gain.value = volume;
-        gain.connect(volumeGain);
-        finalOutputNode = volumeGain;
-
+      if (source) {
         source.start(time);
         source.stop(time + duration);
+        source.connect(gain);
+        finalOutputNode = gain;
       }
     } else if (instrumentType === 'drums') {
       const { source, gain } = drumSounds[noteName](context);
-
-      const volumeGain = context.createGain();
-      volumeGain.gain.value = volume;
-      gain.connect(volumeGain);
-      finalOutputNode = volumeGain;
-
+      source.connect(gain);
       source.start(time);
       source.stop(time + 0.5);
+      finalOutputNode = gain;
     } else {
         return;
     }
 
-    if (context === audioContextRef.current) {
-      finalOutputNode.connect(masterGainNodeRef.current);
-      const delayGain = context.createGain();
-      delayGain.gain.value = delaySend;
-      finalOutputNode.connect(delayGain);
-      delayGain.connect(delayNodeRef.current);
-    } else {
-      finalOutputNode.connect(context.destination);
+    if (finalOutputNode) {
+      if (context === audioContextRef.current) {
+        finalOutputNode.connect(masterGainNodeRef.current);
+      } else {
+        finalOutputNode.connect(context.destination);
+      }
     }
   };
 
+
   /**
-   * Inicia la reproducción del secuenciador en un bucle.
+   * Starts the sequencer playback loop.
    */
   const startPlayback = () => {
     stopPlayback();
@@ -397,6 +379,11 @@ const App = () => {
       return;
     }
 
+    // Ensure audio context is in 'running' state
+    if (audioContextRef.current.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+
     const intervalTime = 60000 / bpm / 4;
     const noteDuration = intervalTime / 1000 * 0.9;
 
@@ -405,9 +392,6 @@ const App = () => {
     playLoopRef.current = setInterval(() => {
       parsedTracks.forEach(trackDef => {
         const { volume, instrumentType, noteSequence } = parseSingleTrackDefinition(trackDef);
-
-        masterGainNodeRef.current.gain.value = volume;
-        feedbackGainRef.current.gain.value = 0.2; // Delay fijo para simplificar
 
         const parsedSequence = noteSequence
           .toLowerCase()
@@ -421,7 +405,7 @@ const App = () => {
           if (mappedNote) {
             playSound(instrumentType, mappedNote, volume, noteDuration);
           } else if (currentNote === '-') {
-            // Nota de silencio, no hacemos nada
+            // Silence, do nothing
           } else {
             console.warn(`Nota no reconocida o inválida: ${currentNote}`);
           }
@@ -441,7 +425,7 @@ const App = () => {
 
 
   /**
-   * Detiene la reproducción.
+   * Stops playback.
    */
   const stopPlayback = () => {
     clearInterval(playLoopRef.current);
@@ -450,7 +434,7 @@ const App = () => {
   };
 
   /**
-   * Llama a la API de Gemini para generar una nueva secuencia musical para la pista activa.
+   * Calls the Gemini API to generate a new musical sequence.
    */
   const generateMusic = async () => {
     setStatusMessage('Generando música con IA...');
@@ -496,7 +480,7 @@ const App = () => {
     }
   };
 
-  // --- Funciones de Firestore
+  // --- Firestore functions
   const saveProject = async () => {
     if (!isAuthReady || !userId || !projectId) {
       setStatusMessage('Por favor, ingresa un ID de proyecto válido.');
@@ -545,7 +529,7 @@ const App = () => {
     }
   };
 
-  // --- Funciones para exportar a .WAV
+  // --- Functions to export to .WAV
   const exportToWAV = async () => {
     setIsExporting(true);
     setStatusMessage('Exportando a WAV...');
@@ -608,7 +592,7 @@ const App = () => {
     }
   };
 
-  // Función auxiliar para convertir AudioBuffer a WAV
+  // Helper function to convert AudioBuffer to WAV
   const audioBufferToWav = (buffer) => {
       const numChannels = buffer.numberOfChannels;
       const sampleRate = buffer.sampleRate;
@@ -647,7 +631,7 @@ const App = () => {
       return new Blob([dataView], { type: 'audio/wav' });
   };
 
-  // --- Funciones del editor de audio
+  // --- Audio editor functions
   const handleAudioFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file || !audioContextRef.current) return;
@@ -670,6 +654,9 @@ const App = () => {
     if (!loadedAudioBuffer || !audioContextRef.current) return;
 
     stopPlayback();
+    if (audioContextRef.current.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
 
     const source = audioContextRef.current.createBufferSource();
     source.buffer = loadedAudioBuffer;
@@ -677,11 +664,14 @@ const App = () => {
     const startOffset = trimStart;
     const duration = trimEnd - trimStart;
 
-    source.connect(audioContextRef.current.destination);
+    const gainNode = audioContextRef.current.createGain();
+    gainNode.connect(audioContextRef.current.destination);
+
+    source.connect(gainNode);
     source.start(0, startOffset, duration);
   };
 
-  // Renderiza la interfaz de usuario.
+  // Render the user interface
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 text-white p-4 font-sans">
       <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-4xl">
@@ -692,7 +682,7 @@ const App = () => {
           IDE
           <span className="text-xl"> powered by </span>
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-600">
-            Gemini AI and pacureok
+            Gemini AI
           </span>
         </h1>
         {userId && (
