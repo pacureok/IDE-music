@@ -889,6 +889,12 @@ const App = () => {
             >
               Generar con IA
             </button>
+            <button
+              onClick={resetGrid}
+              className="flex-1 sm:flex-initial w-full sm:w-auto px-6 py-3 rounded-xl font-bold bg-orange-600 hover:bg-orange-700 text-white shadow-orange-500/50 transition-all duration-300 ease-in-out transform hover:scale-105"
+            >
+              Reiniciar Cuadrícula
+            </button>
           </div>
         </div>
 
